@@ -1,0 +1,826 @@
+html {
+	flex-direction: column;
+}
+html,
+body {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background-color: hsl(0, 0%, 100%);
+}
+
+body {
+	background-color: transparent;
+	margin: 0;
+	height: 100vh;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	--bodymargin: 10px;
+	--min: min(100vw);
+	--hContent: var(--min);
+	--wContent: var(--min);
+}
+
+.reload-transition {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	z-index: 10000;
+	opacity: 1;
+}
+
+.reload-transition--fade-out {
+	opacity: 0;
+	transition: opacity 700ms ease;
+}
+
+canvas.p5Canvas {
+	display: block;
+	padding-left: 0;
+	padding-right: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+	margin-left: auto;
+	margin-right: auto;
+	margin-top: 0;
+	margin-bottom: 0;
+	/* Fill the viewport; object-fit keeps the aspect ratio so the
+	   larger dimension of the artwork always spans 100% of the space,
+	   scaling up as well as down. */
+	width: 100vw !important;
+	height: 100vh !important;
+	object-fit: contain;
+	/* Default: sharp pixels when the buffer is smaller than the screen */
+	image-rendering: pixelated;
+	image-rendering: crisp-edges;
+}
+
+canvas.p5Canvas.is-smooth {
+	image-rendering: auto;
+}
+
+.reload-transition__image {
+	display: block;
+	/* Match canvas.p5Canvas sizing so the snapshot overlays the canvas exactly */
+	width: 100vw;
+	height: 100vh;
+	object-fit: contain;
+	image-rendering: pixelated;
+	image-rendering: crisp-edges;
+}
+
+/* Standalone FPS/loop overlays — hidden when unified #debug-panel is used */
+#shader-fps-overlay,
+#shader-loop-overlay {
+	position: fixed;
+	top: 10px;
+	left: 10px;
+	z-index: 9990;
+	padding: 4px 8px;
+	background: rgba(0, 0, 0, 0.6);
+	color: #fff;
+	font:
+		12px/1.2 "Courier New",
+		monospace;
+	pointer-events: none;
+	display: none;
+}
+
+#shader-loop-overlay {
+	top: 28px;
+}
+
+#shader-fps-overlay.is-hidden,
+#shader-loop-overlay.is-hidden {
+	display: none;
+}
+
+#shader-loop-overlay.is-warning {
+	color: #ffc864;
+}
+
+#midi-clock-overlay {
+	position: fixed;
+	bottom: 10px;
+	left: 10px;
+	z-index: 10000;
+	padding: 6px 10px;
+	background: rgba(0, 0, 0, 0.65);
+	color: #fff;
+	font:
+		11px/1.35 "Courier New",
+		monospace;
+	pointer-events: none;
+	white-space: pre;
+	max-width: min(90vw, 320px);
+}
+
+#midi-clock-overlay.is-hidden {
+	display: none;
+}
+
+#midi-clock-overlay.is-warning {
+	color: #ffc864;
+}
+
+#midi-clock-overlay.is-disconnected {
+	color: #ff8a6a;
+}
+
+#midi-clock-overlay.is-stopped {
+	color: #aaa;
+}
+
+/* Unified debug panel (perf + audio) — separate from #controls */
+#debug-panel,
+.debug-panel {
+	position: fixed;
+	top: 12px;
+	left: 12px;
+	z-index: 9995;
+	width: 240px;
+	padding: 10px 12px 12px;
+	box-sizing: border-box;
+	background: rgba(8, 10, 14, 0.82);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 6px;
+	color: #eee;
+	font:
+		11px/1.35 "Courier New",
+		ui-monospace,
+		monospace;
+	/* Must receive clicks (loop toggle, etc.) — panel is display:none when hidden */
+	pointer-events: auto;
+	backdrop-filter: blur(6px);
+}
+
+.debug-panel.is-hidden {
+	display: none;
+}
+
+.debug-panel__header {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	margin-bottom: 8px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.debug-panel__title {
+	font-size: 12px;
+	font-weight: bold;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.debug-panel__hint {
+	opacity: 0.45;
+	font-size: 10px;
+}
+
+.debug-panel__section {
+	margin-top: 8px;
+}
+
+.debug-panel__section + .debug-panel__section {
+	padding-top: 8px;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.debug-panel__row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+.debug-panel__label {
+	opacity: 0.65;
+	min-width: 52px;
+}
+
+.debug-panel__loop-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.debug-panel__loop-toggle input {
+	width: 13px;
+	height: 13px;
+	margin: 0;
+	accent-color: #5dff7a;
+	cursor: pointer;
+}
+
+.debug-panel__loop-toggle .debug-panel__label {
+	opacity: 0.85;
+	min-width: 0;
+}
+
+.debug-panel__value {
+	margin-left: auto;
+	font-variant-numeric: tabular-nums;
+}
+
+.debug-panel__value.is-warning {
+	color: #ffc864;
+}
+
+.debug-panel__value.is-ok {
+	color: #5dff7a;
+}
+
+.debug-panel__value.is-warn {
+	color: #ffc864;
+}
+
+.debug-panel__value.is-error {
+	color: #ff5a5a;
+}
+
+.debug-panel__signal {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 1px solid rgba(255, 255, 255, 0.35);
+	box-sizing: border-box;
+	flex-shrink: 0;
+}
+
+.debug-panel__signal.is-ok {
+	background: #5dff7a;
+	border-color: #5dff7a;
+	box-shadow: 0 0 8px rgba(93, 255, 122, 0.55);
+}
+
+.debug-panel__signal.is-warn {
+	background: #ffc864;
+	border-color: #ffc864;
+}
+
+.debug-panel__signal.is-error {
+	background: #ff5a5a;
+	border-color: #ff5a5a;
+}
+
+.debug-panel__bars {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	margin: 6px 0;
+}
+
+.debug-panel__bar-meta {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 2px;
+	opacity: 0.85;
+}
+
+.debug-panel__bar-track {
+	height: 5px;
+	background: rgba(255, 255, 255, 0.08);
+	border-radius: 2px;
+	overflow: hidden;
+}
+
+.debug-panel__bar-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 2px;
+	background: #6ec8ff;
+	transition: width 40ms linear;
+}
+
+.debug-panel__bar[data-bar="bass"] .debug-panel__bar-fill {
+	background: #ff5a5a;
+}
+
+.debug-panel__bar[data-bar="mid"] .debug-panel__bar-fill {
+	background: #5dff7a;
+}
+
+.debug-panel__bar[data-bar="treble"] .debug-panel__bar-fill {
+	background: #5a96ff;
+}
+
+.debug-panel__bar[data-bar="volume"] .debug-panel__bar-fill {
+	background: #c8c8c8;
+}
+
+.debug-panel__bar[data-bar="energy"] .debug-panel__bar-fill {
+	background: #ffc832;
+}
+
+.debug-panel__beat {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 1px solid rgba(255, 255, 255, 0.35);
+	box-sizing: border-box;
+}
+
+.debug-panel__beat.is-active {
+	background: #ff6464;
+	border-color: #ff6464;
+	box-shadow: 0 0 8px rgba(255, 100, 100, 0.7);
+}
+
+.debug-panel__spectrum {
+	display: block;
+	width: 100%;
+	height: 56px;
+	margin-top: 4px;
+	border-radius: 3px;
+	background: rgba(0, 0, 0, 0.35);
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+	.control-button {
+		min-height: 44px; /* iOS minimum touch target size */
+	}
+
+	.control-button:active {
+		background: rgba(0, 0, 0, 0.9) !important;
+		transform: scale(0.95) !important;
+	}
+}
+
+/* Mobile controls */
+.controls {
+	position: fixed;
+	top: 10px;
+	right: 10px;
+	z-index: 10001;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+
+	&.hide {
+		visibility: hidden;
+		opacity: 0;
+		pointer-events: none;
+	}
+}
+
+/* Hide on desktop, show on mobile */
+@media (min-width: 769px) {
+	.controls {
+		display: flex;
+	}
+}
+
+.control-button {
+	padding: 10px 16px;
+	background: rgba(0, 0, 0, 0.7);
+	color: white;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 8px;
+	font-size: 14px;
+	font-weight: bold;
+	font-family: "Courier New", monospace;
+	cursor: pointer;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+	transition: all 0.2s ease;
+	min-height: 44px; /* iOS minimum touch target size */
+}
+
+.control-button:hover {
+	background: rgba(0, 0, 0, 0.8);
+	border-color: rgba(255, 255, 255, 0.5);
+}
+
+.control-button:active {
+	background: rgba(0, 0, 0, 0.8);
+	transform: scale(0.95);
+}
+
+.control-button.active {
+	background: rgba(0, 0, 0, 0.8);
+	border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Show on mobile */
+@media (max-width: 768px) {
+	.controls {
+		display: flex;
+		flex-direction: row;
+	}
+}
+
+#download-button {
+	display: none;
+}
+
+/* Shader effects panel — drawers to toggle / edit ShaderEffects live */
+.shader-effects-panel {
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	z-index: 9995;
+	width: min(320px, calc(100vw - 24px));
+	max-height: calc(100vh - 24px);
+	display: flex;
+	flex-direction: column;
+	padding: 10px 10px 12px;
+	box-sizing: border-box;
+	background: rgba(8, 10, 14, 0.9);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 6px;
+	color: #eee;
+	font:
+		11px/1.35 "Courier New",
+		ui-monospace,
+		monospace;
+	pointer-events: auto;
+	backdrop-filter: blur(6px);
+	overflow: hidden;
+}
+
+.shader-effects-panel.is-hidden {
+	display: none;
+}
+
+.shader-effects-panel__header {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	margin-bottom: 8px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__title {
+	font-size: 12px;
+	font-weight: bold;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.shader-effects-panel__hint {
+	opacity: 0.45;
+	font-size: 10px;
+}
+
+.shader-effects-panel__output {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 8px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__output-title {
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	opacity: 0.55;
+}
+
+.shader-effects-panel__output-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.shader-effects-panel__output-label {
+	min-width: 36px;
+	opacity: 0.65;
+}
+
+.shader-effects-panel__output-sep {
+	opacity: 0.4;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__output .shader-effects-panel__number {
+	width: 56px;
+	flex: 1;
+}
+
+.shader-effects-panel__preset {
+	max-width: 72px;
+	padding: 2px 3px;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	border-radius: 3px;
+	background: rgba(0, 0, 0, 0.35);
+	color: #eee;
+	font:
+		10px/1.2 "Courier New",
+		ui-monospace,
+		monospace;
+	cursor: pointer;
+}
+
+.shader-effects-panel__apply {
+	width: 26px;
+	height: 22px;
+	padding: 0;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: 3px;
+	background: rgba(110, 200, 255, 0.15);
+	color: #cfefff;
+	font:
+		12px/1 "Courier New",
+		monospace;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__apply:hover {
+	background: rgba(110, 200, 255, 0.3);
+}
+
+.shader-effects-panel__output .shader-effects-panel__number:disabled,
+.shader-effects-panel__preset:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.shader-effects-panel__handle {
+	cursor: grab;
+	opacity: 0.55;
+	font-size: 12px;
+	line-height: 1;
+	padding: 0 2px;
+	user-select: none;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__handle:hover {
+	opacity: 0.95;
+}
+
+.shader-effects-panel__handle:active,
+.shader-effects-panel__drawer.is-dragging .shader-effects-panel__handle {
+	cursor: grabbing;
+}
+
+.shader-effects-panel__drawer.is-dragging {
+	opacity: 0.45;
+}
+
+.shader-effects-panel__drawer.is-drop-before {
+	box-shadow: inset 0 2px 0 #6ec8ff;
+}
+
+.shader-effects-panel__drawer.is-drop-after {
+	box-shadow: inset 0 -2px 0 #6ec8ff;
+}
+
+.shader-effects-panel__list {
+	overflow: auto;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-right: 2px;
+}
+
+.shader-effects-panel__drawer {
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.shader-effects-panel__drawer.is-enabled {
+	border-color: rgba(93, 255, 122, 0.35);
+}
+
+.shader-effects-panel__summary {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 8px;
+	cursor: pointer;
+	list-style: none;
+	user-select: none;
+}
+
+.shader-effects-panel__summary::-webkit-details-marker {
+	display: none;
+}
+
+.shader-effects-panel__summary::after {
+	content: "▸";
+	opacity: 0.45;
+	font-size: 10px;
+	transition: transform 0.15s ease;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__drawer[open] > .shader-effects-panel__summary::after {
+	transform: rotate(90deg);
+}
+
+.shader-effects-panel__enable {
+	width: 14px;
+	height: 14px;
+	accent-color: #5dff7a;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__name {
+	font-weight: bold;
+	letter-spacing: 0.02em;
+}
+
+.shader-effects-panel__clone {
+	margin-left: auto;
+	margin-right: 0;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.06);
+	color: #eee;
+	font:
+		14px/1 "Courier New",
+		monospace;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__clone:hover {
+	background: rgba(110, 200, 255, 0.25);
+	border-color: rgba(110, 200, 255, 0.55);
+}
+
+.shader-effects-panel__remove {
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	margin-right: 2px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 4px;
+	background: rgba(255, 80, 80, 0.08);
+	color: #f88;
+	font:
+		16px/1 "Courier New",
+		monospace;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__remove:hover {
+	background: rgba(255, 80, 80, 0.28);
+	border-color: rgba(255, 120, 120, 0.55);
+	color: #fcc;
+}
+
+.shader-effects-panel__footer {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid rgba(255, 255, 255, 0.1);
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__template {
+	flex: 1;
+	min-width: 0;
+	padding: 5px 6px;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	border-radius: 4px;
+	background: rgba(0, 0, 0, 0.4);
+	color: #eee;
+	font:
+		11px/1.2 "Courier New",
+		ui-monospace,
+		monospace;
+	cursor: pointer;
+}
+
+.shader-effects-panel__template:focus {
+	outline: none;
+	border-color: rgba(110, 200, 255, 0.65);
+}
+
+.shader-effects-panel__add {
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: 4px;
+	background: rgba(110, 200, 255, 0.12);
+	color: #cfefff;
+	font:
+		18px/1 "Courier New",
+		monospace;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__add:hover:not(:disabled) {
+	background: rgba(110, 200, 255, 0.3);
+	border-color: rgba(110, 200, 255, 0.55);
+}
+
+.shader-effects-panel__add:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.shader-effects-panel__body {
+	padding: 4px 8px 10px;
+	border-top: 1px solid rgba(255, 255, 255, 0.06);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.shader-effects-panel__empty {
+	opacity: 0.45;
+	padding: 4px 0;
+}
+
+.shader-effects-panel__control {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.shader-effects-panel__control--bool {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+	padding: 2px 0;
+}
+
+.shader-effects-panel__bool {
+	width: 14px;
+	height: 14px;
+	accent-color: #6ec8ff;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.shader-effects-panel__bool-label {
+	opacity: 0.9;
+}
+
+.shader-effects-panel__control-meta {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	opacity: 0.85;
+}
+
+.shader-effects-panel__number {
+	width: 72px;
+	box-sizing: border-box;
+	padding: 2px 4px;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	border-radius: 3px;
+	background: rgba(0, 0, 0, 0.35);
+	color: #eee;
+	font:
+		11px/1.2 "Courier New",
+		ui-monospace,
+		monospace;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.shader-effects-panel__number:focus {
+	outline: none;
+	border-color: rgba(110, 200, 255, 0.65);
+	background: rgba(0, 0, 0, 0.55);
+}
+
+.shader-effects-panel__number[data-integer="1"] {
+	width: 52px;
+}
+
+.shader-effects-panel__control input[type="range"],
+.shader-effects-panel__slider {
+	width: 100%;
+	margin: 0;
+	accent-color: #6ec8ff;
+	cursor: pointer;
+}
