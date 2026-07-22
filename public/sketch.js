@@ -28,6 +28,9 @@ const CANVAS_CONFIG = {
 	FIXED_HEIGHT: 240,
 };
 
+// localStorage: keep shader effects panel edits (effect params + output framing) across refresh
+const PERSIST_SHADER_PANEL = true;
+
 const DEBUG_CONFIG = {
 	DEFAULT_PIXEL_DENSITY_DESKTOP: 5,
 	DEFAULT_PIXEL_DENSITY_MOBILE: 1,
@@ -151,9 +154,17 @@ function initDisplayCanvas(canvasW, canvasH) {
 	try {
 		const displayCanvas = createCanvas(canvasW, canvasH, WEBGL);
 		displayCanvas.pixelDensity(pixel_density);
+
+		let restoredPanel = null;
+		if (PERSIST_SHADER_PANEL && typeof shaderEffects.loadPersistedPanelConfig === "function") {
+			restoredPanel = shaderEffects.loadPersistedPanelConfig();
+			if (restoredPanel) console.log("[sketch] restored shader panel config from localStorage");
+		}
+
 		// Render ratio is configured in shaderManager (constructor or setRenderRatio).
 		// To override from the sketch, set CANVAS_CONFIG.SHADER_RENDER before setup runs.
-		if (CANVAS_CONFIG.SHADER_RENDER) {
+		// Skipped when a persisted panel config already restored its own render ratio.
+		if (!restoredPanel && CANVAS_CONFIG.SHADER_RENDER) {
 			shaderManager.setRenderRatio(CANVAS_CONFIG.SHADER_RENDER);
 		}
 		shaderEffects.setup(width, height, mainCanvas, displayCanvas, pixel_density);

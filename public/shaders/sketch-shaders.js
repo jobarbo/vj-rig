@@ -79,6 +79,9 @@ class ShaderEffects {
 		// When true: NEAREST texture sampling + CSS pixelated upscale (no blur between colors)
 		this.crispPixels = true;
 
+		// localStorage key for shaderEffectsPanel persistence (save/load/clear)
+		this.persistStorageKey = "shaderEffectsPanelConfig";
+
 		// Master loop — wall-clock cycle with optional pause before restart
 		this.loopConfig = {
 			enabled: true,
@@ -478,6 +481,9 @@ class ShaderEffects {
 			this.effectTemplates[root] = template;
 		}
 
+		// Snapshot of built-in defaults, used by resetToDefaultPanelConfig()
+		this._defaultPanelConfig = this._buildPanelConfigSnapshot();
+
 		// Cache for last enabled effects (to detect changes)
 		this.lastEnabledEffects = null;
 
@@ -666,6 +672,109 @@ class ShaderEffects {
 
 	getCrispPixels() {
 		return !!this.crispPixels;
+	}
+
+	/**
+	 * Serializable snapshot of panel-editable state (per-effect params + output framing).
+	 * Excludes "uniforms" (static mapping, not user-editable) and internal phase-tracking fields.
+	 */
+	_buildPanelConfigSnapshot() {
+		const effects = {};
+		for (const [name, effect] of Object.entries(this.effectsConfig)) {
+			const {uniforms, ...rest} = effect;
+			effects[name] = JSON.parse(JSON.stringify(rest));
+		}
+		return {
+			effects,
+			effectOrder: Object.keys(this.effectsConfig),
+			renderRatio: {...this.renderRatio},
+			crispPixels: this.crispPixels,
+		};
+	}
+
+	/**
+	 * Persist the current shaderEffectsPanel state (effect params + output framing) to localStorage.
+	 * Called by shaderEffectsPanel on every control change (debounced).
+	 */
+	savePersistedPanelConfig() {
+		try {
+			localStorage.setItem(this.persistStorageKey, JSON.stringify(this._buildPanelConfigSnapshot()));
+		} catch (error) {
+			console.warn("[ShaderEffects] failed to save panel config:", error);
+		}
+		return this;
+	}
+
+	/**
+	 * Restore panel state saved by savePersistedPanelConfig(). Applies matching params onto the
+	 * already-loaded effectsConfig (effects no longer present in this build are skipped).
+	 * @returns {object|null} the restored snapshot, or null if nothing valid was saved
+	 */
+	loadPersistedPanelConfig() {
+		let saved;
+		try {
+			const raw = localStorage.getItem(this.persistStorageKey);
+			if (!raw) return null;
+			saved = JSON.parse(raw);
+		} catch (error) {
+			console.warn("[ShaderEffects] failed to parse saved panel config:", error);
+			return null;
+		}
+		if (!saved || typeof saved !== "object" || !saved.effects) return null;
+
+		for (const [name, values] of Object.entries(saved.effects)) {
+			if (!this.effectsConfig[name]) continue;
+			for (const [key, value] of Object.entries(values)) {
+				if (key === "uniforms") continue;
+				this.effectsConfig[name][key] = value;
+			}
+		}
+
+		if (Array.isArray(saved.effectOrder) && saved.effectOrder.length) {
+			this.reorderEffects(saved.effectOrder);
+		}
+
+		if (saved.renderRatio) this.setRenderRatio(saved.renderRatio);
+		if (typeof saved.crispPixels === "boolean") this.setCrispPixels(saved.crispPixels);
+
+		this.lastEnabledEffects = null;
+		console.log("[ShaderEffects] restored panel config from localStorage");
+		return saved;
+	}
+
+	/**
+	 * Remove any saved panel config from localStorage.
+	 */
+	clearPersistedPanelConfig() {
+		try {
+			localStorage.removeItem(this.persistStorageKey);
+		} catch (error) {
+			console.warn("[ShaderEffects] failed to clear saved panel config:", error);
+		}
+		return this;
+	}
+
+	/**
+	 * Restore effect params + output framing to the sketch's built-in defaults (pre-persistence).
+	 */
+	resetToDefaultPanelConfig() {
+		if (!this._defaultPanelConfig) return this;
+		const defaults = this._defaultPanelConfig;
+
+		const nextEffects = {};
+		for (const name of defaults.effectOrder) {
+			const root = String(name).replace(/\d+$/, "") || name;
+			const uniforms = this.effectTemplates[root]?.uniforms || this.effectsConfig[name]?.uniforms || {};
+			nextEffects[name] = {...JSON.parse(JSON.stringify(defaults.effects[name])), uniforms};
+		}
+		this.effectsConfig = nextEffects;
+
+		this.setRenderRatio(defaults.renderRatio);
+		this.setCrispPixels(defaults.crispPixels);
+		this.lastEnabledEffects = null;
+		this.reinitializePipeline();
+		console.log("[ShaderEffects] reset panel config to defaults");
+		return this;
 	}
 
 	/**
