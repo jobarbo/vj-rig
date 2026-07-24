@@ -24,17 +24,17 @@ const CANVAS_CONFIG = {
 	SCALE_FACTOR_X: 1.0,
 	SCALE_FACTOR_Y: 1.0,
 	FORCE_SIZE: true,
-	FIXED_WIDTH: 240,
-	FIXED_HEIGHT: 240,
+	FIXED_WIDTH: 966,
+	FIXED_HEIGHT: 96,
 };
 
 // localStorage: keep shader effects panel edits (effect params + output framing) across refresh
 const PERSIST_SHADER_PANEL = true;
 
 const DEBUG_CONFIG = {
-	DEFAULT_PIXEL_DENSITY_DESKTOP: 5,
+	DEFAULT_PIXEL_DENSITY_DESKTOP: 1,
 	DEFAULT_PIXEL_DENSITY_MOBILE: 1,
-	HELP_TEXT: "Controls: D debug · E shaders · L loop · C controls · G symmetry debug · M MIDI clock",
+	HELP_TEXT: "Controls: 0–9 scenes · S scene label · D debug · E shaders · L loop · C controls · G symmetry debug · M MIDI clock",
 };
 
 const MIDI_CLOCK_CONFIG = {
@@ -69,7 +69,7 @@ let shaderCanvas = null;
 let pixel_density = 1;
 
 // Layout (derived from canvas dimensions at setup)
-let ARTWORK_RATIO = 1.6;
+let ARTWORK_RATIO = 1.0;
 let DIM = 0;
 let MULTIPLIER = 1;
 
@@ -225,10 +225,11 @@ function setupAudioReactive() {
 
 	audioKnob
 		.setSource("microphone") // or 'chime'
-		.map("energy", "zoom", "zoomOutAmount", 1.2, 5.4, 0, 1, 2, 0.85)
-		//.map("energy", "pixelSort", "threshold", 0, 1, 0, 1, 10, 0.75)
-		.map("energy", "pixelSort", "sortAmount", 0, 120, 0, 1, 1, 0.75) /* s */
-		.map("energy", "pixelSort", "threshold", 0, 1, 0, 1, 1, 0.75); /* s */
+		// energy is already volume^1.4 — keep stepFrom moderate or the param stays pegged at outMin
+		.map("energy", "zoom", "zoomOutAmount", 1.0, 5.4, 0, 1, 1.4, 0.35)
+		.map("bass", "pixelSort", "sortAmount", 0, 28, 0, 1, 2.2, 0.65)
+		// higher energy → lower threshold (more pixels sorted)
+		.map("energy", "pixelSort", "threshold", 0.55, 0.1, 0, 1, 1.2, 0.35);
 
 	if (typeof debugPanel !== "undefined") {
 		debugPanel.init({
@@ -348,6 +349,10 @@ async function setup() {
 	setupMidiKnobs();
 	setupMidiClockOsc();
 
+	if (typeof sceneManager !== "undefined" && typeof SCENES !== "undefined") {
+		sceneManager.init(SCENES, typeof SCENE_CONTROLS !== "undefined" ? SCENE_CONTROLS : {});
+	}
+
 	if (typeof createDownloadButton === "function") {
 		createDownloadButton();
 	}
@@ -355,7 +360,17 @@ async function setup() {
 }
 
 function draw() {
-	mainCanvas.background(190, 100, 0, 100);
+	const captureRemote = typeof sceneManager !== "undefined" && sceneManager.isShaderCaptureActive();
+
+	if (captureRemote) {
+		const ok = sceneManager.captureInto(mainCanvas);
+		if (!ok) {
+			mainCanvas.background(190, 100, 0, 100);
+		}
+	} else {
+		mainCanvas.background(330, 100, 0, 100);
+	}
+
 	if (typeof audioKnob !== "undefined") audioKnob.update();
 	if (typeof debugPanel !== "undefined") debugPanel.update();
 	if (typeof shaderEffectsPanel !== "undefined") shaderEffectsPanel.update();
@@ -363,8 +378,10 @@ function draw() {
 	if (typeof midiClockOsc !== "undefined") midiClockOsc.update();
 
 	const maxFrames = config.animation.maxFrames;
-	updateParticles(maxFrames);
-	onAnimationComplete(maxFrames);
+	if (!captureRemote) {
+		updateParticles(maxFrames);
+		onAnimationComplete(maxFrames);
+	}
 
 	const isSketchComplete = maxFrames != null && sketchFrame >= maxFrames;
 	renderOutput(isSketchComplete);
@@ -375,6 +392,14 @@ function keyPressed() {
 	const tag = document.activeElement?.tagName;
 	if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || document.activeElement?.isContentEditable) {
 		return;
+	}
+
+	if (typeof sceneManager !== "undefined" && sceneManager.handleKey(key)) {
+		return;
+	}
+
+	if (key === "S" || key === "s") {
+		if (typeof sceneManager !== "undefined") sceneManager.toggleLabel();
 	}
 
 	if (key === "D" || key === "d") {

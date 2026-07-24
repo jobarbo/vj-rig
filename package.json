@@ -4,7 +4,7 @@
 	"description": "Venue-agnostic live VJ visuals — mic, MIDI Grid, shader pipeline, TouchDesigner OSC clock",
 	"private": true,
 	"scripts": {
-		"start": "npx --yes serve public -p 3301",
+		"start": "node ./scripts/dev-server.js",
 		"osc:bridge": "node ./scripts/osc-bridge.js",
 		"osc:test": "node ./scripts/osc-test.js"
 	},

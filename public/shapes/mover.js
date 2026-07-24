@@ -22,20 +22,20 @@ class Mover {
 		canvas.noStroke();
 		canvas.push();
 		canvas.rectMode(CENTER);
-		canvas.fill(40, 100, 90);
-		canvas.rect(this.x, this.y, trackHeight, this.size);
+		canvas.fill(240, 100, 50);
+		canvas.rect(this.x, this.y, trackHeight * 2, this.size * 2);
 		canvas.pop();
 
 		canvas.push();
 		canvas.rectMode(CENTER);
-		canvas.fill(210, 100, 50, 100);
-		canvas.rect(squareX, this.y, squareSize, squareSize);
+		canvas.fill(170, 100, 70, 100);
+		canvas.rect(squareX, this.y, squareSize * 8, squareSize * 2);
 		canvas.pop();
 
 		canvas.push();
 		canvas.rectMode(CENTER);
-		canvas.fill(complementaryHue, 100, 50, 100);
-		canvas.rect(reverseSquareX, this.y, squareSize, squareSize);
+		canvas.fill(30, 100, 50, 100);
+		canvas.rect(reverseSquareX, this.y, squareSize * 8, squareSize * 2);
 		canvas.pop();
 	}
 
