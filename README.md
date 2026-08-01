@@ -18,8 +18,6 @@ Optional seed: `http://localhost:3301/?seed=my-show-seed`
 
 | Key | Action |
 |-----|--------|
-| `0`–`9` | Scene switch (`1` = local, `2` = first remote, …) |
-| `S` | Toggle scene label |
 | `D` | Debug panel (FPS, audio) |
 | `E` | Shader effects panel |
 | `L` | Loop countdown |
@@ -27,21 +25,9 @@ Optional seed: `http://localhost:3301/?seed=my-show-seed`
 | `G` | Symmetry debug |
 | `M` | MIDI clock overlay (OSC) |
 
-## Scenes
-
-Local sketch + remote iframes. Edit [`public/scenes/scenes-config.js`](public/scenes/scenes-config.js) to add URLs.
-
-Remote scenes with `shaders: true` (default) load through `/scene-proxy/…` so the host can capture their canvas into the local shader pipeline. Use `npm start` (custom dev-server). Set `shaders: false` for a raw iframe with no host FX.
-
-| Control | Scene |
-|---------|--------|
-| `1` / MIDI CC40 | Local VJ Rig |
-| `2` / MIDI CC41 | First remote (ex-lignis by default) |
-| `3+` / CC42+ | Next entries in `SCENES` |
-
 ## MIDI Grid
 
-Device name `"Grid"`. CC 32–39 map to shader uniforms (see `setupMidiKnobs` / `knob.js`). CC 40+ select scenes.
+Device name `"Grid"`. CC 32–39 map to shader uniforms (see `setupMidiKnobs` / `knob.js`).
 
 ## Microphone
 
@@ -78,7 +64,7 @@ npm run osc:test
 ```
 public/           static sketch (p5 + shaders)
 public/library/   generative-utils submodule
-scripts/          osc-bridge.js, osc-test.js
+scripts/          osc-bridge.js, osc-test.js, dev-server.js
 ```
 
 ## Library submodule
