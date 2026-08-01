@@ -23,9 +23,10 @@ const CANVAS_CONFIG = {
 	WRAP_PADDING_FACTOR: 0.05,
 	SCALE_FACTOR_X: 1.0,
 	SCALE_FACTOR_Y: 1.0,
-	FORCE_SIZE: true,
+	FORCE_SIZE: false,
 	FIXED_WIDTH: 966,
 	FIXED_HEIGHT: 96,
+	SHADER_ANIMATION_SPEED: 1.0,
 };
 
 // localStorage: keep shader effects panel edits (effect params + output framing) across refresh
@@ -168,6 +169,9 @@ function initDisplayCanvas(canvasW, canvasH) {
 			shaderManager.setRenderRatio(CANVAS_CONFIG.SHADER_RENDER);
 		}
 		shaderEffects.setup(width, height, mainCanvas, displayCanvas, pixel_density);
+		if (typeof shaderEffects.setAnimationSpeed === "function") {
+			shaderEffects.setAnimationSpeed(CANVAS_CONFIG.SHADER_ANIMATION_SPEED);
+		}
 		console.log("Shader effects initialized successfully");
 		return displayCanvas;
 	} catch (error) {

@@ -16,13 +16,19 @@
  * 2. Then: shaderEffects.setup(width, height, mainCanvas, shaderCanvas)
  * 3. To apply shaders: shaderEffects.apply()
  * 4. To update time: shaderEffects.updateTime()
+ * 5. Master speed: set SHADER_ANIMATION_SPEED in sketch.js (or shaderEffects.setAnimationSpeed())
  */
+
+// Matches sketch.js BASE_WIDTH — pixel params are authored at this short-edge size.
+const SHADER_SIZE_REF = 1000;
+
 class ShaderEffects {
 	constructor() {
 		// Shader animation control
 		this.continueShadersAfterCompletion = false; // Set to false to stop shaders when sketch is done
 		this.applyShadersDuringSketch = true; // Set to true to apply shaders while sketching
 		this.shaderFrameRate = 60; // Target shader animation rate (see advanceShaderClock)
+		this.animationSpeed = 1.0; // Master speed multiplier — override via setAnimationSpeed()
 		this.shaderApplyInterval = 1; // Run full pipeline every N p5 frames during sketch (1 = every frame)
 		this.shaderFrameCounter = 0;
 		this.lastShaderUpdateTime = 0;
@@ -31,6 +37,7 @@ class ShaderEffects {
 		this.shaderTime = 0;
 		this.shaderSeed = 0;
 		this.particleAnimationComplete = false;
+		this.loadingProgress = 0.0; // Loading progress from 0.0 (0%) to 1.0 (100%)
 
 		// Translation state tracking (to prevent position jumps when speed changes)
 		this.translationPhase = {
@@ -106,18 +113,22 @@ class ShaderEffects {
 				amount: 0.1,
 				timeMultiplier: 0.0,
 				octave: 4.0,
+				noiseScale: 15.0, // shader falls back to 15.0 when 0
+				emberMode: 0.0,
 				uniforms: {
 					uTime: "shaderTime * timeMultiplier",
 					uSeed: "shaderSeed",
 					uAmount: "amount",
 					uOctave: "octave",
+					uNoiseScale: "noiseScale",
+					uEmberMode: "emberMode",
 				},
 			},
 
 			collage: {
 				enabled: false,
 				amount: 1.0,
-				tileSize: 255.0,
+				tileSize: 255.0, // px @ short-edge 1000 (× sizeScale)
 				tileSize2: 50.0,
 				tileSize3: 100.0,
 				sizeNoise: 23.0,
@@ -125,9 +136,9 @@ class ShaderEffects {
 				timeMultiplier: 0.0,
 				uniforms: {
 					uSeed: "shaderSeed + 2222.0",
-					uTileSize1: "tileSize",
-					uTileSize2: "tileSize2",
-					uTileSize3: "tileSize3",
+					uTileSize1: "tileSize * sizeScale",
+					uTileSize2: "tileSize2 * sizeScale",
+					uTileSize3: "tileSize3 * sizeScale",
 					uSizeNoise: "sizeNoise",
 					uRotNoise: "rotNoise",
 					uAmount: "amount",
@@ -297,6 +308,89 @@ class ShaderEffects {
 					uResolution: "[width, height]",
 				},
 			},
+			// Real pixel sort (Kim Asendorf ASDF) — permutes pixels, unlike pixelSort smear.
+			// See library/shaders/asdf-sort/README.md for algorithm + perf levers.
+			asdfSort: {
+				enabled: false,
+				axisVertical: 1.0,
+				axisHorizontal: 0.0,
+				axisDiagonal: 0.0,
+				axisAntiDiagonal: 0.0,
+				axisRegionScale: 4.0,
+				angle: 0.0,
+				center: [0.5, 0.5],
+				sortKey: 0.0, // 0 luma, 1 hue, 2 sat, 3 lightness, 4 R, 5 G, 6 B
+				gateKey: 0.0,
+				thresholdLow: 0.25,
+				thresholdHigh: 0.85,
+				invertGate: 0.0,
+				invertOrder: 0.0,
+				maxSpan: 24.0, // px @ short-edge 1000 (× sizeScale)
+				spanStep: 1.0,
+				spanJitter: 0.7,
+				edgeWobble: 0.35,
+				organicAmount: 0.6,
+				organicScale: 3.0,
+				organicSpeed: 0.0,
+				animateThreshold: 0.0,
+				thresholdAnimMode: 0.0,
+				thresholdAnimAmount: 0.15,
+				sweepMode: 0.0,
+				sweepAmount: 0.5,
+				sweepScale: 1.5,
+				sweepSpeed: 0.5,
+				animateSpan: 0.0,
+				spanAnimAmount: 0.4,
+				spanAnimSpeed: 0.5,
+				mix: 1.0,
+				timeMultiplier: 1.0,
+				_phase: 0.0,
+				uniforms: {
+					uTime: "_phase",
+					uSeed: "shaderSeed + 2468.0",
+					uAxisVertical: "axisVertical",
+					uAxisHorizontal: "axisHorizontal",
+					uAxisDiagonal: "axisDiagonal",
+					uAxisAntiDiagonal: "axisAntiDiagonal",
+					uAxisRegionScale: "axisRegionScale",
+					uAngle: "angle",
+					uCenter: "center",
+					uSortKey: "sortKey",
+					uGateKey: "gateKey",
+					uThresholdLow: "thresholdLow",
+					uThresholdHigh: "thresholdHigh",
+					uInvertGate: "invertGate",
+					uInvertOrder: "invertOrder",
+					uMaxSpan: "maxSpan * sizeScale",
+					uSpanStep: "spanStep * sizeScale",
+					uSpanJitter: "spanJitter",
+					uEdgeWobble: "edgeWobble",
+					uOrganicAmount: "organicAmount",
+					uOrganicScale: "organicScale",
+					uOrganicSpeed: "organicSpeed",
+					uAnimateThreshold: "animateThreshold",
+					uThresholdAnimMode: "thresholdAnimMode",
+					uThresholdAnimAmount: "thresholdAnimAmount",
+					uSweepMode: "sweepMode",
+					uSweepAmount: "sweepAmount",
+					uSweepScale: "sweepScale",
+					uSweepSpeed: "sweepSpeed",
+					uAnimateSpan: "animateSpan",
+					uSpanAnimAmount: "spanAnimAmount",
+					uSpanAnimSpeed: "spanAnimSpeed",
+					uMix: "mix",
+					uResolution: "[width, height]",
+				},
+			},
+			loaderGlitch: {
+				enabled: false,
+				uniforms: {
+					uProgress: "loadingProgress",
+					uSeed: "shaderSeed + 8888.0",
+					uResolution: "[width, height]",
+					uRenderDensity: "sizeScale",
+				},
+			},
 			colorQuantize: {
 				enabled: false,
 				levels: 2.0, // shader: max(levels, 2) … 256
@@ -312,7 +406,7 @@ class ShaderEffects {
 				levels: 2.0, // shader: max(levels, 2)
 				mix: 1.0, // shader clamps 0–1
 				strength: 1.0,
-				scale: 0.1,
+				scale: 1.0, // pattern cell px @ short-edge 1000 (× sizeScale)
 				colorMode: 0.0, // 0=luma quantize, 1=per-channel quantize
 				uniforms: {
 					uResolution: "[width, height]",
@@ -320,7 +414,7 @@ class ShaderEffects {
 					uLevels: "levels",
 					uMix: "mix",
 					uStrength: "strength",
-					uScale: "scale",
+					uScale: "scale * sizeScale",
 					uColorMode: "colorMode",
 					uSeed: "shaderSeed + 4321.0",
 				},
@@ -363,7 +457,7 @@ class ShaderEffects {
 			crtDisplay: {
 				enabled: false,
 				brightness: 0.0,
-				cellSize: 3.0,
+				cellSize: 3.0, // px @ short-edge 1000 (× sizeScale)
 				gapOpacity: 0.2,
 				rgbOpacity: 0.5,
 				rgbGain: [1.0, 1.0, 1.0],
@@ -373,9 +467,10 @@ class ShaderEffects {
 				uniforms: {
 					uResolution: "[width, height]",
 					uBrightness: "brightness",
-					uCellSize: "cellSize",
+					uCellSize: "cellSize * sizeScale",
 					uGapOpacity: "gapOpacity",
 					uRgbOpacity: "rgbOpacity",
+					uRgbGain: "rgbGain",
 					uDotRadius: "dotRadius",
 					uDotFalloff: "dotFalloff",
 					uFilterMode: "filterMode",
@@ -400,7 +495,8 @@ class ShaderEffects {
 			blur: {
 				enabled: false,
 				blurMode: 1.0, // 0=gaussian, 1=radial, 2=directional
-				blurAmount: 43.0, // Blur radius/intensity in pixels
+				// Gaussian/directional: px @ short-edge 1000 (× sizeScale). Radial: UV units (no scale).
+				blurAmount: 43.0,
 				blurQuality: 120.0, // Sampling quality (1-8, higher = better but slower)
 				blurDirection: 0, // Angle in radians for directional mode
 				blurCenter: [0.5, 0.5], // Center for radial mode (normalized 0-1)
@@ -411,7 +507,7 @@ class ShaderEffects {
 				uniforms: {
 					uResolution: "[width, height]",
 					uBlurMode: "blurMode",
-					uBlurAmount: "blurAmount",
+					uBlurAmount: "(blurMode < 0.5 || blurMode > 1.5) ? (blurAmount * sizeScale) : blurAmount",
 					uBlurQuality: "blurQuality",
 					uBlurDirection: "blurDirection",
 					uBlurCenter: "blurCenter",
@@ -517,9 +613,11 @@ class ShaderEffects {
 			shaderManager.loadShader("grain", "grain/fragment.frag", "grain/vertex.vert"),
 			shaderManager.loadShader("collage", "collage-rotate/fragment.frag", "collage-rotate/vertex.vert"),
 			shaderManager.loadShader("pixelSort", "pixel-sort/fragment.frag", "pixel-sort/vertex.vert"),
+			shaderManager.loadShader("asdfSort", "asdf-sort/fragment.frag", "asdf-sort/vertex.vert"),
 			shaderManager.loadShader("crtDisplay", "pixel-checker/fragment.frag", "pixel-checker/vertex.vert"),
 			shaderManager.loadShader("symmetry", "symmetry/fragment.frag", "symmetry/vertex.vert"),
 			shaderManager.loadShader("symmetry2", "symmetry/fragment.frag", "symmetry/vertex.vert"),
+			shaderManager.loadShader("loaderGlitch", "loader-glitch/fragment.frag", "loader-glitch/vertex.vert"),
 			shaderManager.loadShader("pixelGrid", "pixel-grid/fragment.frag", "pixel-grid/vertex.vert"),
 			shaderManager.loadShader("blur", "blur/fragment.frag", "blur/vertex.vert"),
 			shaderManager.loadShader("zoom", "zoom/fragment.frag", "zoom/vertex.vert"),
@@ -675,30 +773,156 @@ class ShaderEffects {
 	}
 
 	/**
-	 * Serializable snapshot of panel-editable state (per-effect params + output framing).
-	 * Excludes "uniforms" (static mapping, not user-editable) and internal phase-tracking fields.
+	 * Physical resolution of the shader render target (what uResolution reports).
 	 */
-	_buildPanelConfigSnapshot() {
-		const effects = {};
-		for (const [name, effect] of Object.entries(this.effectsConfig)) {
-			const {uniforms, ...rest} = effect;
-			effects[name] = JSON.parse(JSON.stringify(rest));
-		}
+	getPhysicalResolution() {
+		const density = this.mainCanvas?.pixelDensity?.() ?? this.pixelDensity ?? 1;
+		const scale = this.shaderPipeline?.getDensityScale?.() ?? 1;
+		return [this.mainCanvas.width * density * scale, this.mainCanvas.height * density * scale];
+	}
+
+	/**
+	 * Scale factors mapping panel pixel params (authored @ SHADER_SIZE_REF) onto the framebuffer.
+	 * sizeScale = viewportScale × renderDensity — use for px → physical uniforms.
+	 */
+	getSizeScaleFactors() {
+		const pixelDensity = this.mainCanvas?.pixelDensity?.() ?? this.pixelDensity ?? 1;
+		const densityScale = this.shaderPipeline?.getDensityScale?.() ?? 1;
+		const renderDensity = pixelDensity * densityScale;
+		const logicalW = this.mainCanvas?.width ?? SHADER_SIZE_REF;
+		const logicalH = this.mainCanvas?.height ?? SHADER_SIZE_REF;
+		const viewportScale = Math.min(logicalW, logicalH) / SHADER_SIZE_REF;
 		return {
-			effects,
-			effectOrder: Object.keys(this.effectsConfig),
-			renderRatio: {...this.renderRatio},
-			crispPixels: this.crispPixels,
+			pixelDensity,
+			densityScale,
+			renderDensity,
+			viewportScale,
+			sizeScale: viewportScale * renderDensity,
 		};
 	}
 
 	/**
-	 * Persist the current shaderEffectsPanel state (effect params + output framing) to localStorage.
-	 * Called by shaderEffectsPanel on every control change (debounced).
+	 * Set master shader animation speed (scales all time-driven effects uniformly).
+	 * @param {number} speed - Multiplier (1.0 = default)
 	 */
+	setAnimationSpeed(speed) {
+		this.animationSpeed = Math.max(0, speed ?? 1);
+		return this;
+	}
+
+	getAnimationSpeed() {
+		return this.animationSpeed;
+	}
+
+	/**
+	 * Update loading progress for loaderGlitch (0..1).
+	 */
+	setLoadingProgress(progress) {
+		this.loadingProgress = Math.max(0.0, Math.min(1.0, progress));
+		return this;
+	}
+
+	/**
+	 * Strip runtime / non-editable fields from an effect for panel persistence.
+	 */
+	_stripEffectForPanel(effect) {
+		const skip = new Set(["uniforms", "translationPhaseX", "translationPhaseY", "rotationPhase"]);
+		const out = {};
+		for (const [k, v] of Object.entries(effect || {})) {
+			if (skip.has(k) || k.startsWith("_")) continue;
+			out[k] = typeof v === "object" && v !== null ? JSON.parse(JSON.stringify(v)) : v;
+		}
+		return out;
+	}
+
+	/**
+	 * Serializable snapshot for panel import/export + localStorage (version 1).
+	 */
+	exportPanelConfig() {
+		const order = Object.keys(this.effectsConfig);
+		const effects = {};
+		for (const name of order) {
+			effects[name] = this._stripEffectForPanel(this.effectsConfig[name]);
+		}
+		return {
+			version: 1,
+			order,
+			effects,
+			output: {
+				renderRatio: this.getRenderRatio(),
+				crispPixels: this.getCrispPixels(),
+				animationSpeed: this.getAnimationSpeed(),
+			},
+		};
+	}
+
+	/**
+	 * Restore panel config from a version-1 snapshot.
+	 * @returns {boolean} true if applied
+	 */
+	importPanelConfig(data) {
+		if (!data || data.version !== 1 || !data.effects || typeof data.effects !== "object") {
+			return false;
+		}
+
+		const savedEffects = data.effects;
+		const order = Array.isArray(data.order) ? data.order.filter((n) => savedEffects[n]) : [];
+		for (const name of Object.keys(savedEffects)) {
+			if (!order.includes(name)) order.push(name);
+		}
+
+		const next = {};
+		for (const name of order) {
+			const saved = savedEffects[name];
+			if (!saved || typeof saved !== "object") continue;
+
+			const root = String(name).replace(/\d+$/, "") || name;
+			const template = this.effectTemplates[root];
+			if (!template) {
+				console.warn(`[ShaderEffects] importPanelConfig: unknown template "${root}" for "${name}" — skipped`);
+				continue;
+			}
+
+			const merged = JSON.parse(JSON.stringify(template));
+			for (const [k, v] of Object.entries(saved)) {
+				if (k === "uniforms" || k.startsWith("_")) continue;
+				if (k === "translationPhaseX" || k === "translationPhaseY" || k === "rotationPhase") continue;
+				if (!(k in template)) continue;
+				merged[k] = typeof v === "object" && v !== null ? JSON.parse(JSON.stringify(v)) : v;
+			}
+			if ("translationPhaseX" in merged) merged.translationPhaseX = 0;
+			if ("translationPhaseY" in merged) merged.translationPhaseY = 0;
+			if ("rotationPhase" in merged) merged.rotationPhase = 0;
+			merged.uniforms = template.uniforms ? JSON.parse(JSON.stringify(template.uniforms)) : {};
+			merged.pass = saved.pass || template.pass || root;
+			next[name] = merged;
+		}
+
+		if (Object.keys(next).length === 0) return false;
+
+		this.effectsConfig = next;
+		for (const name of Object.keys(this.effectsConfig)) {
+			this._ensurePhaseTracking(name);
+		}
+
+		if (data.output && typeof data.output === "object") {
+			if (data.output.renderRatio) this.setRenderRatio(data.output.renderRatio);
+			if (typeof data.output.crispPixels === "boolean") this.setCrispPixels(data.output.crispPixels);
+			if (typeof data.output.animationSpeed === "number") this.setAnimationSpeed(data.output.animationSpeed);
+		}
+
+		this.lastEnabledEffects = null;
+		if (this.shaderPipeline) this.reinitializePipeline();
+		return true;
+	}
+
+	_buildPanelConfigSnapshot() {
+		return this.exportPanelConfig();
+	}
+
 	savePersistedPanelConfig() {
 		try {
-			localStorage.setItem(this.persistStorageKey, JSON.stringify(this._buildPanelConfigSnapshot()));
+			localStorage.setItem(this.persistStorageKey, JSON.stringify(this.exportPanelConfig()));
 		} catch (error) {
 			console.warn("[ShaderEffects] failed to save panel config:", error);
 		}
@@ -706,9 +930,7 @@ class ShaderEffects {
 	}
 
 	/**
-	 * Restore panel state saved by savePersistedPanelConfig(). Applies matching params onto the
-	 * already-loaded effectsConfig (effects no longer present in this build are skipped).
-	 * @returns {object|null} the restored snapshot, or null if nothing valid was saved
+	 * @returns {object|null} restored snapshot, or null
 	 */
 	loadPersistedPanelConfig() {
 		let saved;
@@ -720,31 +942,33 @@ class ShaderEffects {
 			console.warn("[ShaderEffects] failed to parse saved panel config:", error);
 			return null;
 		}
-		if (!saved || typeof saved !== "object" || !saved.effects) return null;
+		if (!saved || typeof saved !== "object") return null;
 
+		if (saved.version === 1) {
+			const ok = this.importPanelConfig(saved);
+			if (ok) console.log("[ShaderEffects] restored panel config from localStorage");
+			return ok ? saved : null;
+		}
+
+		if (!saved.effects) return null;
 		for (const [name, values] of Object.entries(saved.effects)) {
 			if (!this.effectsConfig[name]) continue;
 			for (const [key, value] of Object.entries(values)) {
-				if (key === "uniforms") continue;
+				if (key === "uniforms" || key.startsWith("_")) continue;
 				this.effectsConfig[name][key] = value;
 			}
 		}
-
 		if (Array.isArray(saved.effectOrder) && saved.effectOrder.length) {
 			this.reorderEffects(saved.effectOrder);
 		}
-
 		if (saved.renderRatio) this.setRenderRatio(saved.renderRatio);
 		if (typeof saved.crispPixels === "boolean") this.setCrispPixels(saved.crispPixels);
 
 		this.lastEnabledEffects = null;
-		console.log("[ShaderEffects] restored panel config from localStorage");
+		console.log("[ShaderEffects] restored legacy panel config from localStorage");
 		return saved;
 	}
 
-	/**
-	 * Remove any saved panel config from localStorage.
-	 */
 	clearPersistedPanelConfig() {
 		try {
 			localStorage.removeItem(this.persistStorageKey);
@@ -754,15 +978,17 @@ class ShaderEffects {
 		return this;
 	}
 
-	/**
-	 * Restore effect params + output framing to the sketch's built-in defaults (pre-persistence).
-	 */
 	resetToDefaultPanelConfig() {
 		if (!this._defaultPanelConfig) return this;
 		const defaults = this._defaultPanelConfig;
+		if (defaults.version === 1) {
+			this.importPanelConfig(defaults);
+			console.log("[ShaderEffects] reset panel config to defaults");
+			return this;
+		}
 
 		const nextEffects = {};
-		for (const name of defaults.effectOrder) {
+		for (const name of defaults.effectOrder || Object.keys(defaults.effects || {})) {
 			const root = String(name).replace(/\d+$/, "") || name;
 			const uniforms = this.effectTemplates[root]?.uniforms || this.effectsConfig[name]?.uniforms || {};
 			nextEffects[name] = {...JSON.parse(JSON.stringify(defaults.effects[name])), uniforms};
@@ -928,6 +1154,11 @@ class ShaderEffects {
 	resetLoopState() {
 		this.shaderTime = 0;
 		this.restoreInitialPhases();
+
+		for (const name in this.effectsConfig) {
+			const effect = this.effectsConfig[name];
+			if (effect && typeof effect._phase === "number") effect._phase = 0;
+		}
 
 		this.translationPhase = {};
 		this.lastTranslationSpeed = {};
@@ -1262,9 +1493,10 @@ class ShaderEffects {
 					this.resetLoopState();
 				}
 
-				const delta = dt * (this.shaderFrameRate / 100);
+				const delta = dt * (this.shaderFrameRate / 100) * this.animationSpeed;
 				if (delta > 0) {
 					this.shaderTime += delta;
+					this.updatePhaseAccumulators(delta);
 					this.updateTranslationPhases(delta);
 					this.updateRotationPhases(delta);
 				}
@@ -1272,6 +1504,7 @@ class ShaderEffects {
 			}
 
 			// Yoyo: map wall-clock to triangle wave — shader time runs forward then backward
+			// (animationSpeed is ignored in yoyo — loop duration is the master clock)
 			const prevElapsed = Math.max(elapsed - dt, 0);
 			const {progress} = this.getLoopProgress(elapsed);
 			const prevProgress = this.getLoopProgress(prevElapsed).progress;
@@ -1292,15 +1525,17 @@ class ShaderEffects {
 
 			this.shaderTime = targetShaderTime;
 			if (deltaShaderTime !== 0) {
+				this.updatePhaseAccumulators(deltaShaderTime);
 				this.updateTranslationPhases(deltaShaderTime);
 				this.updateRotationPhases(deltaShaderTime);
 			}
 			return deltaShaderTime;
 		}
 
-		const delta = dt * (this.shaderFrameRate / 100);
+		const delta = dt * (this.shaderFrameRate / 100) * this.animationSpeed;
 		if (delta > 0) {
 			this.shaderTime += delta;
+			this.updatePhaseAccumulators(delta);
 			this.updateTranslationPhases(delta);
 			this.updateRotationPhases(delta);
 		}
@@ -1323,8 +1558,23 @@ class ShaderEffects {
 	 */
 	updateTime(delta = 0.01) {
 		this.shaderTime += delta;
+		this.updatePhaseAccumulators(delta);
 		this.updateTranslationPhases(delta);
 		this.updateRotationPhases(delta);
+		return this;
+	}
+
+	/**
+	 * Jump-free clock for effects with numeric `_phase` (e.g. asdfSort).
+	 * Integrating speed keeps continuity when timeMultiplier is dragged in the panel.
+	 */
+	updatePhaseAccumulators(delta) {
+		for (const name in this.effectsConfig) {
+			const effect = this.effectsConfig[name];
+			if (!effect.enabled || typeof effect._phase !== "number") continue;
+			const speed = typeof effect.timeMultiplier === "number" ? effect.timeMultiplier : 1;
+			effect._phase += delta * speed;
+		}
 		return this;
 	}
 
@@ -1442,26 +1692,32 @@ class ShaderEffects {
 		if (typeof value === "string") {
 			// Handle special cases
 			if (value === "[width, height]") {
-				return [this.mainCanvas.width, this.mainCanvas.height];
+				return this.getPhysicalResolution();
 			}
 
 			if (value === "[gridCols, gridRows]") {
 				return [effect.gridCols, effect.gridRows];
 			}
 
-			// Handle expressions like 'shaderSeed + 777.0'
+			// Handle expressions like 'shaderSeed + 777.0' or 'tileSize * sizeScale'
 			if (value.includes("+") || value.includes("-") || value.includes("*") || value.includes("/")) {
 				try {
-					// Create a safe evaluation context with available variables
+					const [physW, physH] = this.getPhysicalResolution();
+					const scales = this.getSizeScaleFactors();
 					const evalContext = {
 						shaderTime: this.shaderTime,
 						shaderSeed: this.shaderSeed,
-						width: this.mainCanvas.width,
-						height: this.mainCanvas.height,
-						...effect, // Include effect properties
+						loadingProgress: this.loadingProgress,
+						width: physW,
+						height: physH,
+						...effect,
+						pixelDensity: scales.pixelDensity,
+						densityScale: scales.densityScale,
+						renderDensity: scales.renderDensity,
+						viewportScale: scales.viewportScale,
+						sizeScale: scales.sizeScale,
 					};
 
-					// Replace variable names with their values
 					let evalString = value;
 					for (const [varName, varValue] of Object.entries(evalContext)) {
 						if (typeof varValue === "number") {
@@ -1478,14 +1734,33 @@ class ShaderEffects {
 
 			// Handle property references from the effect config
 			if (value in effect) {
-				return effect[value];
+				const resolved = effect[value];
+				if (resolved === undefined || resolved === null) {
+					if (value === "rgbGain") return [1.0, 1.0, 1.0];
+					if (value === "center" || value === "blurCenter") return [0.5, 0.5];
+					return 0;
+				}
+				if (Array.isArray(resolved) && resolved.length === 0 && value === "rgbGain") {
+					return [1.0, 1.0, 1.0];
+				}
+				return resolved;
 			}
 
 			// Handle global variable references
 			if (value === "shaderTime") return this.shaderTime;
 			if (value === "shaderSeed") return this.shaderSeed;
-			if (value === "width") return this.mainCanvas.width;
-			if (value === "height") return this.mainCanvas.height;
+			if (value === "loadingProgress") return this.loadingProgress;
+			if (value === "width") return this.getPhysicalResolution()[0];
+			if (value === "height") return this.getPhysicalResolution()[1];
+			if (
+				value === "renderDensity" ||
+				value === "pixelDensity" ||
+				value === "densityScale" ||
+				value === "viewportScale" ||
+				value === "sizeScale"
+			) {
+				return this.getSizeScaleFactors()[value];
+			}
 
 			// Try to evaluate as a simple variable reference
 			try {

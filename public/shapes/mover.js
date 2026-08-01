@@ -40,7 +40,7 @@ class Mover {
 	}
 
 	move(frameCount) {
-		this.angle += 0.018;
+		this.angle += 0.0018;
 		this.colorIndex = Math.floor(frameCount * 0.05) % this.palette.length;
 		this.currentColor = this.palette[this.colorIndex];
 	}
