@@ -40,7 +40,7 @@ const SCENE_KEY_TIMEOUT_MS = 500;
 const DEBUG_CONFIG = {
 	DEFAULT_PIXEL_DENSITY_DESKTOP: 1,
 	DEFAULT_PIXEL_DENSITY_MOBILE: 1,
-	HELP_TEXT: "Controls: D debug · E shaders · L loop · C controls · G symmetry debug · M MIDI clock · digits = scene (e.g. 1 2 = scene 12)",
+	HELP_TEXT: "Controls: D debug · E shaders · L loop · C controls · G symmetry debug · M MIDI clock · V scene params · digits = scene (e.g. 1 2 = scene 12)",
 };
 
 const MIDI_CLOCK_CONFIG = {
@@ -351,6 +351,7 @@ async function draw() {
 	if (typeof audioKnob !== "undefined") audioKnob.update();
 	if (typeof debugPanel !== "undefined") debugPanel.update();
 	if (typeof shaderEffectsPanel !== "undefined") shaderEffectsPanel.update();
+	window.scenePanel?.update();
 	updateKnobSmoothing();
 	if (typeof midiClockOsc !== "undefined") midiClockOsc.update();
 
@@ -400,6 +401,10 @@ function keyPressed() {
 
 	if (key === "C" || key === "c") {
 		document.getElementById("controls")?.classList.toggle("hide");
+	}
+
+	if (key === "V" || key === "v") {
+		window.scenePanel?.toggle();
 	}
 
 	// Scene selection: digits only, buffered like a vim count. "1" then "2"

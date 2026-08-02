@@ -56,6 +56,23 @@ export class SceneHost {
 		this._switching = null;
 		this._lastTime = performance.now();
 		this._quarantined = new Set();
+		this._changeListeners = new Set();
+	}
+
+	/** Fires after the active scene changes (switch, or quarantine teardown). */
+	onChange(fn) {
+		this._changeListeners.add(fn);
+		return () => this._changeListeners.delete(fn);
+	}
+
+	_notifyChange() {
+		for (const fn of this._changeListeners) {
+			try {
+				fn();
+			} catch (err) {
+				console.warn("[sceneHost] onChange listener failed:", err);
+			}
+		}
 	}
 
 	list() {
@@ -178,8 +195,10 @@ export class SceneHost {
 				surface: scene.surface,
 				fit: def.fit || meta.fit || "cover",
 				smooth: (def.smooth ?? meta.smooth) !== false,
+				mirror: !!(def.mirror ?? meta.mirror),
 				alpha: 1,
 			});
+			this._notifyChange();
 			return true;
 		} catch (err) {
 			console.warn(`[sceneHost] failed to load scene "${id}":`, err);
@@ -265,6 +284,7 @@ export class SceneHost {
 				console.warn(`[sceneHost] quarantining "${cur.def.id}" after ${cur.errors} errors`);
 				this._quarantined.add(cur.def.id);
 				this._teardownCurrent();
+				this._notifyChange();
 			}
 		}
 	}

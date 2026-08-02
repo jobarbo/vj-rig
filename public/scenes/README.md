@@ -26,6 +26,7 @@ it resolves to scene 12, not scene 1 followed by scene 2.
 | --- | --- |
 | `1` | Scene 1 |
 | `1` `2` (within 500ms) | Scene 12 |
+| `V` | Toggle the scene param panel |
 
 Taken elsewhere and unavailable: `D` `E` `L` `M` `G` `C`, plus `g` and `Cmd+S`
 which are bound at document level inside the library submodule.
@@ -170,6 +171,77 @@ registered with the global `shaderManager`.
 
 ---
 
+## Params, the panel, and live control
+
+Press `V` to open the scene panel — a slider per declared param, positioned on
+the opposite side of the screen from the shader panel (`E`). It shows and
+drives whatever scene is currently active; switching scenes rebuilds it.
+
+Every write — dragging a slider, an audio mapping, a MIDI binding — goes
+through one path: `shaderEffects.updateEffectParam("scene", paramName, value)`.
+`"scene"` is a reserved pseudo-effect name; the guard for it lives at the top
+of `updateEffectParam` in [`sketch-shaders.js`](../shaders/sketch-shaders.js)
+and routes to `window.sceneParams`, clamping to the param's declared
+`min`/`max` and rounding if `integer: true`. An unknown param name is a silent
+no-op, same as an unknown shader param.
+
+Scene params deliberately do **not** live in `shaderEffects.effectsConfig`:
+`importPanelConfig()` replaces `effectsConfig` wholesale and silently drops
+unknown keys, and it runs on every boot. Keeping scene params in a separate
+registry means the shader panel's import/export/persist can't touch them, and
+vice versa.
+
+### Audio-reactive params
+
+Works exactly like mapping a shader param — `audioKnob.map()` doesn't care
+that `"scene"` isn't a real effect:
+
+```js
+audioKnob.map("bass", "scene", "speed", 0, 4);
+```
+
+The panel shows the same live badge as the shader panel: a green `◉` while
+audio is driving the value (slider disabled), which turns into a grey `●`
+if you click it to take manual control back.
+
+### MIDI
+
+Click **learn** next to a param, then turn a hardware knob — the next CC
+message received binds to it. Bindings are independent of `knob.js` (the
+Grid's CC 32–39): this uses its own `requestMIDIAccess()` and
+`addEventListener("midimessage", …)`, so pick a different CC range (40+ is a
+reasonable convention) to avoid confusing overlap, though nothing enforces it.
+
+A binding is keyed by param name only, not by scene — like an audio mapping,
+it stays live across a scene switch and simply does nothing if the new scene
+has no param by that name.
+
+---
+
+## Media scenes: image, video, camera
+
+No p5 instance — the surface is the `<img>`/`<video>` element itself.
+
+```js
+export const meta = {kind: "image", src: "still.jpg", fit: "contain"};
+export const meta = {kind: "video", src: "loop.mp4", fit: "cover", loop: true, muted: true};
+export const meta = {kind: "camera", fit: "cover", mirror: true};
+```
+
+`src` resolves relative to the scene's own folder (via `ctx.asset()`
+internally) — put media files in `public/scenes/media/` (gitignored; keeps
+binaries out of the repo) and reference them from there, e.g.
+`src: "../media/loop.mp4"`.
+
+Camera scenes need no `src`. When more than one camera is available, a device
+picker appears at the top of the scene panel while a camera scene is active;
+choosing a device reloads the scene. `getUserMedia` requires a secure
+context — `localhost` is fine, a bare LAN IP (`http://<ip>:3301`) is not.
+
+[`camera/index.js`](camera/index.js) is the reference scene for this kind.
+
+---
+
 ## Rules the engine enforces for you
 
 You cannot get these wrong; the loader handles them:
@@ -184,9 +256,10 @@ You cannot get these wrong; the loader handles them:
 
 ## Gotchas
 
-- **Assets**: `.mp4`/`.webm` are not in the dev server's MIME map yet and it has
-  no HTTP Range support, so video scenes need those added first.
 - **Media files** belong in `public/scenes/media/`, which is gitignored.
 - **`import()` caches by URL** for the page lifetime. Live reload does a full
   `location.reload()`, so this only matters if you hot-swap by hand.
 - **Use `.js`**, never `.mjs` — `.mjs` is missing from the dev server MIME map.
+- **Camera permission is per-scene-load**: switching to a camera scene twice
+  prompts (or reuses a grant) each time; there's no persistent "keep this
+  camera open in the background" mode.

@@ -7,8 +7,15 @@
 import {SceneHost, registerRuntime} from "./sceneHost.js";
 import {SCENES} from "../scenes/manifest.js";
 import {createGlslScene} from "./runtime/glslScene.js";
+import {createMediaScene} from "./runtime/mediaScene.js";
+import "./sceneParams.js"; // side effect: window.sceneParams
+import {scenePanel} from "./scenePanel.js";
+import {sceneMidi} from "./sceneMidi.js";
 
 registerRuntime("glsl", createGlslScene);
+registerRuntime("image", createMediaScene);
+registerRuntime("video", createMediaScene);
+registerRuntime("camera", createMediaScene);
 
 /**
  * Build the host, expose it as `window.sceneHost`, and activate the first
@@ -31,6 +38,9 @@ export async function bootScenes({width, height, pixelDensity = 1, initial} = {}
 	} else {
 		console.warn("[boot] manifest is empty — nothing to show");
 	}
+
+	scenePanel.init();
+	sceneMidi.init(); // async; scene switching/params work before it resolves
 
 	console.log(`[boot] scene system ready — ${SCENES.length} scene(s), active: ${host.currentId}`);
 	return host;

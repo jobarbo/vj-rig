@@ -7,13 +7,14 @@
 //
 // Fields:
 //   id     required, unique. Also the default folder name under /scenes/.
-//   name   label shown in logs and (later) the panel.
-//   kind   "p5" | "glsl"   (media kinds arrive in a later phase)
+//   name   label shown in logs and the panel.
+//   kind   "p5" | "glsl" | "image" | "video" | "camera"
 //   path   optional override, server-absolute. Defaults to `/scenes/<id>`.
 //   entry  optional module filename. Defaults to `index.js`.
 //   size   "host" (follow mainCanvas) | [width, height] (fixed resolution)
 //   fit    "cover" | "contain" | "stretch"
 //   smooth compositor imageSmoothingEnabled for this scene
+//   mirror horizontally flip the composited surface (camera scenes, usually)
 //
 // `meta` exported by the scene module supplies defaults for size/fit/smooth;
 // anything set here wins.
@@ -21,6 +22,7 @@
 export const SCENES = [
 	{id: "orbit", name: "Orbit", kind: "p5"},
 	{id: "plasma", name: "Plasma", kind: "glsl"},
+	{id: "camera", name: "Camera", kind: "camera"},
 	{id: "_spike", name: "Spike (dev)", kind: "p5"},
 ];
 

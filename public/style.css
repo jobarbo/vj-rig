@@ -103,6 +103,14 @@ canvas.p5Canvas.is-smooth {
 	margin: 0 !important;
 }
 
+/* Scene param panel — reuses .shader-effects-panel__* classes from the
+   shader panel (see shaderEffectsPanel.js) but is a separate DOM tree on the
+   opposite side of the screen, since that panel hardcodes its own id. */
+.scene-panel {
+	left: 12px;
+	right: auto;
+}
+
 .reload-transition__image {
 	display: block;
 	/* Match canvas.p5Canvas sizing so the snapshot overlays the canvas exactly */

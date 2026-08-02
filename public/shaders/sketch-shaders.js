@@ -1243,6 +1243,15 @@ class ShaderEffects {
 	 * @param {*} value - New value
 	 */
 	updateEffectParam(effectName, paramName, value) {
+		// Reserved pseudo-effect: routes audio/MIDI/panel writes to the active
+		// scene's params instead of effectsConfig. Scene params can't live in
+		// effectsConfig — importPanelConfig() replaces it wholesale and silently
+		// drops unknown keys, and loadPersistedPanelConfig() runs at boot.
+		if (effectName === "scene") {
+			window.sceneParams?.set(paramName, value);
+			return this;
+		}
+
 		if (this.effectsConfig[effectName] && this.effectsConfig[effectName][paramName] !== undefined) {
 			this.effectsConfig[effectName][paramName] = value;
 		}
