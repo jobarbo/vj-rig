@@ -68,6 +68,41 @@ canvas.p5Canvas.is-smooth {
 	image-rendering: auto;
 }
 
+/* ---------------------------------------------------------------------------
+   Scene stage — the off-screen host for scene surfaces.
+
+   Deliberately NOT display:none: a hidden <video> stops decoding frames.
+   The id selector outranks the bare `canvas.p5Canvas` rule above at equal
+   !important weight, which is what stops every scene canvas from being blown
+   up to 100vw x 100vh. setCrispPixels() also walks `canvas.p5Canvas` and will
+   touch these — harmless with this override, noted so it isn't debugged later.
+--------------------------------------------------------------------------- */
+#scene-stage {
+	position: fixed;
+	left: -100000px;
+	top: 0;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+	opacity: 0;
+	pointer-events: none;
+	z-index: -1;
+}
+
+#scene-stage canvas.p5Canvas,
+#scene-stage canvas,
+#scene-stage video,
+#scene-stage img {
+	width: auto !important;
+	height: auto !important;
+	max-width: none !important;
+	max-height: none !important;
+	object-fit: fill !important;
+	image-rendering: auto !important;
+	position: static !important;
+	margin: 0 !important;
+}
+
 .reload-transition__image {
 	display: block;
 	/* Match canvas.p5Canvas sizing so the snapshot overlays the canvas exactly */
