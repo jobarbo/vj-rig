@@ -18,7 +18,7 @@ export class Mover {
 	show(canvas) {
 		const {h, s, l} = this.currentColor;
 		canvas.colorMode(canvas.HSL);
-		const trackHeight = this.size * 1;
+		const trackHeight = this.size * 2;
 		const squareSize = this.size / 2;
 		const maxTravel = trackHeight / 2 - squareSize / 2;
 		const squareX = this.x + Math.sin(this.angle) * maxTravel;
@@ -28,19 +28,19 @@ export class Mover {
 		canvas.noStroke();
 		canvas.push();
 		canvas.rectMode(canvas.CENTER);
-		canvas.fill(240, 100, 50);
+		canvas.fill(25, 100, 50);
 		canvas.rect(this.x, this.y, trackHeight, this.size * 2);
 		canvas.pop();
 
 		canvas.push();
 		canvas.rectMode(canvas.CENTER);
-		canvas.fill(170, 100, 70, 100);
+		canvas.fill(40, 100, 70, 100);
 		canvas.rect(squareX, this.y, squareSize * 1, squareSize * 2);
 		canvas.pop();
 
 		canvas.push();
 		canvas.rectMode(canvas.CENTER);
-		canvas.fill(30, 100, 50, 100);
+		canvas.fill(10, 100, 50, 100);
 		canvas.rect(reverseSquareX, this.y, squareSize * 1, squareSize * 2);
 		canvas.pop();
 	}

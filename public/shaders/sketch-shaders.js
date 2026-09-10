@@ -91,7 +91,7 @@ class ShaderEffects {
 
 		// Master loop — wall-clock cycle with optional pause before restart
 		this.loopConfig = {
-			enabled: true,
+			enabled: false,
 			mode: "yoyo", // "yoyo" = smooth ping-pong | "reset" = hard restart
 			// Easing per yoyo half: linear | sine | easeIn | easeOut | easeInOut | bounce
 			easing: "easeInOut",
