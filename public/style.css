@@ -111,6 +111,361 @@ canvas.p5Canvas.is-smooth {
 	right: auto;
 }
 
+/* S-1 MIDI map panel */
+.midi-panel {
+	top: 12px;
+	right: 12px;
+	width: min(380px, calc(100vw - 24px));
+	max-width: 380px;
+	max-height: calc(100vh - 24px);
+	z-index: 9996;
+}
+
+.midi-panel__status {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 8px;
+	padding: 8px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	flex-shrink: 0;
+}
+
+.midi-panel__status-line {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 11px;
+}
+
+.midi-panel__status-meta {
+	justify-content: space-between;
+	opacity: 0.65;
+	font-size: 10px;
+}
+
+.midi-panel__dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	background: #666;
+}
+
+.midi-panel__dot.is-ok {
+	background: #4ade80;
+	box-shadow: 0 0 6px rgba(74, 222, 128, 0.55);
+}
+
+.midi-panel__dot.is-warn {
+	background: #fbbf24;
+}
+
+.midi-panel__activity {
+	text-align: right;
+	max-width: 55%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.midi-panel__toolbar {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 8px;
+	flex-shrink: 0;
+}
+
+.midi-panel__search {
+	flex: 1;
+	min-width: 0;
+	padding: 5px 8px;
+	border-radius: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(0, 0, 0, 0.35);
+	color: #eee;
+	font: inherit;
+	font-size: 11px;
+}
+
+.midi-panel__search:focus {
+	outline: none;
+	border-color: rgba(74, 222, 128, 0.55);
+}
+
+.midi-panel__btn.is-armed {
+	border-color: rgba(74, 222, 128, 0.7);
+	color: #4ade80;
+}
+
+.midi-panel__legend {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 8px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	flex-shrink: 0;
+	font-size: 10px;
+	opacity: 0.7;
+}
+
+.midi-panel__pill {
+	padding: 2px 7px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	background: rgba(255, 255, 255, 0.05);
+}
+
+.midi-panel__pill--target {
+	border-color: rgba(96, 165, 250, 0.45);
+	background: rgba(96, 165, 250, 0.12);
+	color: #93c5fd;
+}
+
+.midi-panel__arrow {
+	opacity: 0.45;
+	font-size: 12px;
+}
+
+.midi-panel__list {
+	gap: 6px;
+}
+
+.midi-panel__section {
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 4px;
+	background: rgba(0, 0, 0, 0.2);
+	/* 	overflow: hidden; */
+}
+
+.midi-panel__section-title {
+	cursor: pointer;
+	list-style: none;
+	padding: 6px 8px;
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	opacity: 0.7;
+	user-select: none;
+}
+
+.midi-panel__section-title::-webkit-details-marker {
+	display: none;
+}
+
+.midi-panel__section-title::after {
+	content: "▸";
+	float: right;
+	opacity: 0.5;
+	transition: transform 0.12s ease;
+}
+
+.midi-panel__section[open] > .midi-panel__section-title::after {
+	transform: rotate(90deg);
+}
+
+.midi-panel__section-body {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 0 6px 6px;
+}
+
+.midi-panel__row {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 7px 8px;
+	border-radius: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	background: rgba(255, 255, 255, 0.03);
+	transition:
+		border-color 0.15s ease,
+		background 0.15s ease;
+}
+
+.midi-panel__row.is-unmapped {
+	opacity: 0.55;
+}
+
+.midi-panel__row.is-mapped {
+	opacity: 1;
+}
+
+.midi-panel__row.is-custom {
+	border-color: rgba(96, 165, 250, 0.35);
+}
+
+.midi-panel__row.is-active {
+	border-color: rgba(74, 222, 128, 0.75);
+	background: rgba(74, 222, 128, 0.08);
+}
+
+.midi-panel__row-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.midi-panel__knob {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+
+.midi-panel__knob-name {
+	font-size: 11px;
+	font-weight: bold;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.midi-panel__cc {
+	font-size: 9px;
+	opacity: 0.45;
+}
+
+.midi-panel__badge {
+	flex-shrink: 0;
+	padding: 1px 6px;
+	border-radius: 999px;
+	font-size: 9px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	opacity: 0.75;
+}
+
+.midi-panel__badge.is-custom {
+	border-color: rgba(96, 165, 250, 0.55);
+	color: #93c5fd;
+	opacity: 1;
+}
+
+.midi-panel__meter-track {
+	height: 3px;
+	border-radius: 2px;
+	background: rgba(255, 255, 255, 0.08);
+	overflow: hidden;
+}
+
+.midi-panel__meter-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 2px;
+	background: #4ade80;
+	transition: width 0.06s linear;
+}
+
+.midi-panel__bind {
+	display: flex;
+	gap: 4px;
+	align-items: center;
+}
+
+.midi-panel__range {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.midi-panel__range-label {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+	font-size: 9px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	opacity: 0.65;
+}
+
+.midi-panel__range-input {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
+	padding: 3px 6px;
+	border-radius: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(0, 0, 0, 0.4);
+	color: #eee;
+	font: inherit;
+	font-size: 11px;
+	opacity: 1;
+}
+
+.midi-panel__range-input:focus {
+	outline: none;
+	border-color: rgba(96, 165, 250, 0.55);
+}
+
+.midi-panel__range-input:disabled {
+	opacity: 0.35;
+}
+
+.midi-panel__select {
+	flex: 1;
+	min-width: 0;
+	max-width: none;
+	padding: 4px 6px;
+	border-radius: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(0, 0, 0, 0.4);
+	color: #eee;
+	font: inherit;
+	font-size: 11px;
+}
+
+.midi-panel__select:focus {
+	outline: none;
+	border-color: rgba(96, 165, 250, 0.55);
+}
+
+.midi-panel__clear {
+	flex-shrink: 0;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border-radius: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	background: transparent;
+	color: #aaa;
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+}
+
+.midi-panel__clear:hover:not(:disabled) {
+	border-color: rgba(248, 113, 113, 0.6);
+	color: #f87171;
+}
+
+.midi-panel__clear:disabled {
+	opacity: 0.25;
+	cursor: default;
+}
+
+.midi-panel__footer {
+	display: flex;
+	gap: 6px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	flex-shrink: 0;
+}
+
+.midi-panel__footer .shader-effects-panel__apply {
+	flex: 1;
+}
+
 .reload-transition__image {
 	display: block;
 	/* Match canvas.p5Canvas sizing so the snapshot overlays the canvas exactly */

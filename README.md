@@ -24,7 +24,7 @@ Optional seed: `http://localhost:3301/?seed=my-show-seed`
 | `L` | Loop countdown |
 | `C` | Toggle download controls |
 | `G` | Symmetry debug |
-| `M` | MIDI clock overlay (OSC) |
+| `M` | S-1 MIDI map panel (knob → shader) |
 | `0`–`9` | Scene select (buffered, e.g. `1` `2` → scene 12) |
 
 ## Roland S-1 (MIDI + USB audio)
@@ -37,7 +37,9 @@ Use the S-1 as a linked performance controller: turning Filter / LFO / ENV knobs
 2. Set the S-1 MIDI channel to **3** (dashboard default).
 3. Click the canvas once to unlock audio + MIDI permissions.
 
-**Preset CC map** (MIDI channel 3) — see `public/midi/s1Midi.js`:
+**Map panel (`M`)** — pick a shader param for each S-1 knob. Mappings persist in `localStorage` (`vjS1Maps`). **Reset defaults** restores the table below. **Clock overlay** toggles the OSC MIDI-clock HUD (formerly key M).
+
+**Default CC map** (MIDI channel 3):
 
 | CC | S-1 | Shader param |
 |----|-----|----------------|
@@ -50,7 +52,7 @@ Use the S-1 as a linked performance controller: turning Filter / LFO / ENV knobs
 | 30 | Env Sustain | `symmetry.translationSpeedX/Y` |
 | 72 | Env Release | `symmetry.timeMultiplier` |
 
-**Learn** — press **learn** next to a param in panel **E** or **V**, then turn any CC. That binding overrides the preset for that CC and is stored in `localStorage` (`vjMidiLearns`).
+**Learn** — press **learn** next to a param in panel **E** or **V**, then turn any CC. That binding overrides the S-1 map for that CC and is stored in `localStorage` (`vjMidiLearns`).
 
 **USB audio** — `audioKnob` prefers the S-1 USB interface (`setSource("s1")`). Panel **D** should show `receiving` when the S-1 is playing. Falls back to the default mic if the S-1 audio device isn’t found.
 

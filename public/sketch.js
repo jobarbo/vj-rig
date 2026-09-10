@@ -47,7 +47,7 @@ const SCENE_KEY_TIMEOUT_MS = 500;
 const DEBUG_CONFIG = {
 	DEFAULT_PIXEL_DENSITY_DESKTOP: 1,
 	DEFAULT_PIXEL_DENSITY_MOBILE: 1,
-	HELP_TEXT: "Controls: D debug · E shaders · L loop · C controls · G symmetry debug · M MIDI clock · V scene params · digits = scene (e.g. 1 2 = scene 12)",
+	HELP_TEXT: "Controls: D debug · E shaders · L loop · C controls · G symmetry debug · M S-1 MIDI map · V scene params · digits = scene",
 };
 
 const MIDI_CLOCK_CONFIG = {
@@ -312,6 +312,7 @@ function startPanelLoop() {
 		if (typeof debugPanel !== "undefined") debugPanel.update();
 		if (typeof shaderEffectsPanel !== "undefined") shaderEffectsPanel.update();
 		window.scenePanel?.update();
+		window.midiPanel?.update();
 		updateKnobSmoothing();
 		if (typeof midiClockOsc !== "undefined") midiClockOsc.update();
 		panelLoopId = requestAnimationFrame(tick);
@@ -455,7 +456,7 @@ function keyPressed() {
 	}
 
 	if (key === "M" || key === "m") {
-		if (typeof midiClockOsc !== "undefined") midiClockOsc.toggleOverlay();
+		window.midiPanel?.toggle();
 	}
 
 	if (key === "G" || key === "g") {

@@ -1,38 +1,248 @@
 /**
- * Roland S-1 → shader presets (Web MIDI CC, channel 3 by default).
+ * Roland S-1 → shader mappings (Web MIDI CC, channel 3 by default).
  *
- * Uses addEventListener so it coexists with sceneMidi / midiLearn.
- * Learn bindings win: if midiLearn claims a (cc, channel), the preset is skipped.
+ * Controllers listed in S1_CONTROLS can be remapped via the MIDI panel (key M).
+ * Defaults come from DEFAULT_MAPS; user overrides persist in localStorage (vjS1Maps).
  *
- * Device detection mirrors s1_dashboard (S-1 / AIRA Compact / Digital Audio Interface).
+ * Learn bindings (midiLearn / panel E·V) still win for the same (cc, channel).
  */
 (function () {
 	const S1_MIDI_CHANNEL = 2; // MIDI channel 3 (0-indexed)
+	const STORAGE_KEY = "vjS1Maps";
 
-	/** @type {Array<{cc:number, effect:string, param:string, outMin:number, outMax:number, integer?:boolean, smooth?:boolean, also?:Array<{effect:string,param:string}>}>} */
-	const S1_PRESETS = [
-		{cc: 74, effect: "pixelSort", param: "threshold", outMin: 0, outMax: 1},
-		{cc: 71, effect: "pixelSort", param: "sortAmount", outMin: 0, outMax: 10},
-		{cc: 3, effect: "symmetry", param: "rotationSpeed", outMin: 0.1, outMax: 150},
-		{cc: 13, effect: "symmetry", param: "rotationStartingAngle", outMin: 0, outMax: 360, smooth: true},
-		{cc: 73, effect: "pixelSort", param: "invert", outMin: 0, outMax: 1},
-		{cc: 75, effect: "pixelSort", param: "sampleCount", outMin: 1, outMax: 64, integer: true},
-		{
-			cc: 30,
+	/** Front-panel continuous knobs available for mapping. */
+	const S1_CONTROLS = [
+		{cc: 74, id: "filter-cutoff", label: "Filter Cutoff", section: "Filter"},
+		{cc: 71, id: "filter-reso", label: "Filter Resonance", section: "Filter"},
+		{cc: 24, id: "filter-env", label: "Filter Env Amt", section: "Filter"},
+		{cc: 25, id: "filter-lfo", label: "Filter LFO Amt", section: "Filter"},
+		{cc: 3, id: "lfo-rate", label: "LFO Rate", section: "LFO"},
+		{cc: 17, id: "lfo-mod-depth", label: "LFO Mod Depth", section: "LFO"},
+		{cc: 13, id: "osc-lfo-pitch", label: "LFO Pitch", section: "Osc"},
+		{cc: 15, id: "square-pw", label: "Square PW", section: "Osc"},
+		{cc: 19, id: "square-level", label: "Square Level", section: "Osc"},
+		{cc: 20, id: "saw-level", label: "Saw Level", section: "Osc"},
+		{cc: 21, id: "sub-level", label: "Sub Level", section: "Osc"},
+		{cc: 23, id: "noise-level", label: "Noise Level", section: "Osc"},
+		{cc: 73, id: "env-attack", label: "Env Attack", section: "Envelope"},
+		{cc: 75, id: "env-decay", label: "Env Decay", section: "Envelope"},
+		{cc: 30, id: "env-sustain", label: "Env Sustain", section: "Envelope"},
+		{cc: 72, id: "env-release", label: "Env Release", section: "Envelope"},
+		{cc: 89, id: "reverb-time", label: "Reverb Time", section: "FX"},
+		{cc: 91, id: "reverb-level", label: "Reverb Level", section: "FX"},
+		{cc: 90, id: "delay-time", label: "Delay Time", section: "FX"},
+		{cc: 92, id: "delay-level", label: "Delay Level", section: "FX"},
+	];
+
+	/** Factory defaults (same targets as the original Grid→S-1 port). */
+	const DEFAULT_MAPS = {
+		74: {effect: "pixelSort", param: "threshold", outMin: 0, outMax: 1},
+		71: {effect: "pixelSort", param: "sortAmount", outMin: 0, outMax: 10},
+		3: {effect: "symmetry", param: "rotationSpeed", outMin: 0.1, outMax: 150},
+		13: {effect: "symmetry", param: "rotationStartingAngle", outMin: 0, outMax: 360, smooth: true},
+		73: {effect: "pixelSort", param: "invert", outMin: 0, outMax: 1},
+		75: {effect: "pixelSort", param: "sampleCount", outMin: 1, outMax: 64, integer: true},
+		30: {
 			effect: "symmetry",
 			param: "translationSpeedX",
 			outMin: 0.1,
 			outMax: 5,
 			also: [{effect: "symmetry", param: "translationSpeedY"}],
 		},
-		{cc: 72, effect: "symmetry", param: "timeMultiplier", outMin: 0.0001, outMax: 10.1},
-	];
+		72: {effect: "symmetry", param: "timeMultiplier", outMin: 0.0001, outMax: 0.1},
+	};
 
-	const presetByCc = new Map(S1_PRESETS.map((p) => [p.cc, p]));
+	/** @type {Map<number, object|null>} null = explicitly unmapped */
+	const mapsByCc = new Map();
+	const listeners = new Set();
+	let lastCc = null;
+	let lastValue7 = 0;
+	let lastAt = 0;
+	let deviceName = null;
+	let inputCount = 0;
 
 	function isLikelyS1Port(name) {
 		const n = String(name || "").toLowerCase();
-		return /s-?1/.test(n) || /aira\s*compact/.test(n) || /compact.*s-?1/.test(n) || (/digital audio interface/.test(n) && /s-?1|aira|compact/.test(n));
+		return (
+			/s-?1/.test(n) ||
+			/aira\s*compact/.test(n) ||
+			/compact.*s-?1/.test(n) ||
+			(/digital audio interface/.test(n) && /s-?1|aira|compact/.test(n))
+		);
+	}
+
+	function notify() {
+		for (const fn of listeners) {
+			try {
+				fn();
+			} catch (err) {
+				console.warn("[s1Midi] listener error:", err);
+			}
+		}
+	}
+
+	function guessRange(effect, param) {
+		const panel = typeof shaderEffectsPanel !== "undefined" ? shaderEffectsPanel : null;
+		const cfg = typeof shaderEffects !== "undefined" ? shaderEffects.effectsConfig?.[effect] : null;
+		const cur = cfg?.[param];
+		if (panel && typeof panel._guessRange === "function" && typeof cur === "number") {
+			const r = panel._guessRange(param, cur);
+			return {outMin: r.min, outMax: r.max, integer: !!r.integer};
+		}
+		if (typeof cur === "number" && Number.isFinite(cur)) {
+			const abs = Math.abs(cur) || 1;
+			if (Number.isInteger(cur)) return {outMin: 0, outMax: Math.max(64, cur * 2), integer: true};
+			if (abs <= 1) return {outMin: 0, outMax: 1};
+			return {outMin: 0, outMax: abs * 2};
+		}
+		return {outMin: 0, outMax: 1};
+	}
+
+	function loadMaps() {
+		mapsByCc.clear();
+		for (const [cc, map] of Object.entries(DEFAULT_MAPS)) {
+			mapsByCc.set(Number(cc), {...map});
+		}
+		try {
+			const raw = localStorage.getItem(STORAGE_KEY);
+			if (!raw) return;
+			const saved = JSON.parse(raw);
+			if (!saved || typeof saved !== "object") return;
+			for (const [ccStr, map] of Object.entries(saved)) {
+				const cc = Number(ccStr);
+				if (!Number.isFinite(cc)) continue;
+				mapsByCc.set(cc, map); // null clears default
+			}
+		} catch (err) {
+			console.warn("[s1Midi] failed to load maps:", err);
+		}
+	}
+
+	function persistMaps() {
+		const out = {};
+		for (const ctrl of S1_CONTROLS) {
+			const map = mapsByCc.get(ctrl.cc);
+			const def = DEFAULT_MAPS[ctrl.cc];
+			if (map == null && def) {
+				out[ctrl.cc] = null;
+				continue;
+			}
+			if (!map) continue;
+			const sameTarget = def && map.effect === def.effect && map.param === def.param;
+			const sameRange =
+				def &&
+				Number(map.outMin) === Number(def.outMin) &&
+				Number(map.outMax) === Number(def.outMax) &&
+				!!map.integer === !!def.integer;
+			if (!def || !sameTarget || !sameRange) {
+				out[ctrl.cc] = {
+					effect: map.effect,
+					param: map.param,
+					outMin: map.outMin,
+					outMax: map.outMax,
+					integer: map.integer,
+					smooth: map.smooth,
+					also: map.also,
+				};
+			}
+		}
+		try {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(out));
+		} catch (err) {
+			console.warn("[s1Midi] failed to persist maps:", err);
+		}
+	}
+
+	function getMap(cc) {
+		if (!mapsByCc.has(cc)) return null;
+		return mapsByCc.get(cc);
+	}
+
+	/**
+	 * @param {number} cc
+	 * @param {string|null} effect
+	 * @param {string|null} param
+	 * @param {{outMin?:number, outMax?:number, integer?:boolean}=} rangeOverride
+	 */
+	function setMap(cc, effect, param, rangeOverride) {
+		if (!effect || !param) {
+			mapsByCc.set(cc, null);
+			persistMaps();
+			reregisterLive();
+			notify();
+			return;
+		}
+		const existing = getMap(cc);
+		const keepRange = existing && existing.effect === effect && existing.param === param;
+		const guessed = guessRange(effect, param);
+		const def = DEFAULT_MAPS[cc];
+		const entry = {
+			effect,
+			param,
+			outMin: rangeOverride?.outMin ?? (keepRange ? existing.outMin : guessed.outMin),
+			outMax: rangeOverride?.outMax ?? (keepRange ? existing.outMax : guessed.outMax),
+			integer: rangeOverride?.integer ?? (keepRange ? existing.integer : guessed.integer),
+			smooth:
+				keepRange && existing.smooth
+					? existing.smooth
+					: def?.smooth && def.param === param && def.effect === effect
+						? def.smooth
+						: param === "rotationStartingAngle",
+			also: keepRange ? existing.also : def?.also && def.effect === effect && def.param === param ? def.also : undefined,
+		};
+		mapsByCc.set(cc, entry);
+		if (entry.smooth && typeof addKnobSmooth === "function" && typeof shaderEffects !== "undefined") {
+			const init = shaderEffects.effectsConfig?.[effect]?.[param] ?? entry.outMin;
+			addKnobSmooth(cc, effect, param, init, 0.08);
+		}
+		persistMaps();
+		reregisterLive();
+		notify();
+	}
+
+	function setMapRange(cc, outMin, outMax) {
+		const map = getMap(cc);
+		if (!map) return;
+		const min = Number(outMin);
+		const max = Number(outMax);
+		if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+		map.outMin = min;
+		map.outMax = max;
+		mapsByCc.set(cc, map);
+		persistMaps();
+		notify();
+	}
+
+	function clearMap(cc) {
+		setMap(cc, null, null);
+	}
+
+	function resetMaps() {
+		try {
+			localStorage.removeItem(STORAGE_KEY);
+		} catch (_) {
+			/* ignore */
+		}
+		loadMaps();
+		reregisterLive();
+		notify();
+	}
+
+	function listShaderTargets() {
+		const cfg = typeof shaderEffects !== "undefined" ? shaderEffects.effectsConfig : null;
+		if (!cfg) return [];
+		const skip = new Set(["uniforms", "enabled", "translationPhaseX", "translationPhaseY", "rotationPhase"]);
+		const out = [];
+		for (const [effect, params] of Object.entries(cfg)) {
+			if (!params || typeof params !== "object") continue;
+			for (const [key, val] of Object.entries(params)) {
+				if (skip.has(key) || key.startsWith("_")) continue;
+				if (typeof val !== "number") continue;
+				out.push({effect, param: key, value: `${effect}.${key}`, label: `${effect} · ${key}`});
+			}
+		}
+		out.sort((a, b) => a.label.localeCompare(b.label));
+		return out;
 	}
 
 	function map7(value7, outMin, outMax, integer) {
@@ -52,21 +262,36 @@
 		}
 	}
 
-	function applyPreset(preset, value7) {
-		const value = map7(value7, preset.outMin, preset.outMax, preset.integer);
+	function applyMap(map, cc, value7) {
+		if (!map) return;
+		const value = map7(value7, map.outMin ?? 0, map.outMax ?? 1, map.integer);
 
-		if (preset.smooth && typeof knobSmoothing !== "undefined" && knobSmoothing[preset.cc]) {
-			knobSmoothing[preset.cc].target = value;
+		if (map.smooth && typeof knobSmoothing !== "undefined" && knobSmoothing[cc]) {
+			knobSmoothing[cc].target = value;
 			if (typeof midiLiveControl !== "undefined") {
-				midiLiveControl.register(preset.effect, preset.param, `S-1 CC${preset.cc}`);
+				midiLiveControl.register(map.effect, map.param, `S-1 CC${cc}`);
 			}
 		} else {
-			setLive(preset.effect, preset.param, value, preset.cc);
+			setLive(map.effect, map.param, value, cc);
 		}
 
-		if (preset.also) {
-			for (const extra of preset.also) {
-				setLive(extra.effect, extra.param, value, preset.cc);
+		if (map.also) {
+			for (const extra of map.also) {
+				setLive(extra.effect, extra.param, value, cc);
+			}
+		}
+	}
+
+	function reregisterLive() {
+		if (typeof midiLiveControl === "undefined") return;
+		for (const ctrl of S1_CONTROLS) {
+			const map = getMap(ctrl.cc);
+			if (!map) continue;
+			midiLiveControl.register(map.effect, map.param, `S-1 CC${ctrl.cc}`);
+			if (map.also) {
+				for (const extra of map.also) {
+					midiLiveControl.register(extra.effect, extra.param, `S-1 CC${ctrl.cc}`);
+				}
 			}
 		}
 	}
@@ -79,17 +304,18 @@
 		const cc = e.data[1];
 		const value7 = e.data[2];
 
-		// While learning, midiLearn owns the next CC — don't also fire presets
+		lastCc = cc;
+		lastValue7 = value7;
+		lastAt = performance.now();
+		notify();
+
 		if (window.midiLearn?.learning) return;
-
 		if (window.midiLearn?.isCcBound?.(cc, channel)) return;
-
 		if (channel !== S1_MIDI_CHANNEL) return;
 
-		const preset = presetByCc.get(cc);
-		if (!preset) return;
-
-		applyPreset(preset, value7);
+		const map = getMap(cc);
+		if (!map) return;
+		applyMap(map, cc, value7);
 	}
 
 	function bindInput(input) {
@@ -99,6 +325,9 @@
 	}
 
 	async function init() {
+		loadMaps();
+		reregisterLive();
+
 		if (!navigator.requestMIDIAccess) {
 			console.warn("[s1Midi] Web MIDI not available");
 			return;
@@ -113,32 +342,83 @@
 			};
 
 			if (s1) {
-				console.log(`[s1Midi] ready — presets on channel ${S1_MIDI_CHANNEL + 1} via "${s1.name}" (${inputs.length} input(s))`);
+				deviceName = s1.name;
+				console.log(`[s1Midi] ready — maps on channel ${S1_MIDI_CHANNEL + 1} via "${s1.name}" (${inputs.length} input(s))`);
 			} else {
-				console.log(`[s1Midi] ready — no S-1-named port yet; listening on all ${inputs.length} input(s), presets still require MIDI ch ${S1_MIDI_CHANNEL + 1}`);
+				deviceName = null;
+				console.log(
+					`[s1Midi] ready — no S-1-named port yet; listening on all ${inputs.length} input(s), maps require MIDI ch ${S1_MIDI_CHANNEL + 1}`,
+				);
 			}
-
-			// Register live badges for preset targets so panel E shows ◉ before first move
-			if (typeof midiLiveControl !== "undefined") {
-				for (const p of S1_PRESETS) {
-					midiLiveControl.register(p.effect, p.param, `S-1 CC${p.cc}`);
-					if (p.also) {
-						for (const extra of p.also) {
-							midiLiveControl.register(extra.effect, extra.param, `S-1 CC${p.cc}`);
-						}
-					}
-				}
-			}
+			inputCount = inputs.length;
+			notify();
 		} catch (err) {
 			console.warn("[s1Midi] requestMIDIAccess failed:", err);
+			deviceName = null;
 		}
 	}
 
+	function isDefaultMap(cc) {
+		const map = getMap(cc);
+		const def = DEFAULT_MAPS[cc];
+		if (!map && !def) return true;
+		if (!map || !def) return false;
+		return (
+			map.effect === def.effect &&
+			map.param === def.param &&
+			Number(map.outMin) === Number(def.outMin) &&
+			Number(map.outMax) === Number(def.outMax)
+		);
+	}
+
+	function mappingStatus() {
+		let mapped = 0;
+		let custom = 0;
+		for (const ctrl of S1_CONTROLS) {
+			const map = getMap(ctrl.cc);
+			if (map) {
+				mapped++;
+				if (!isDefaultMap(ctrl.cc)) custom++;
+			}
+		}
+		return {mapped, custom, total: S1_CONTROLS.length};
+	}
+
+	// Back-compat alias used by midiLearn range hints
+	const S1_PRESETS = S1_CONTROLS.map((c) => {
+		const m = DEFAULT_MAPS[c.cc];
+		return m ? {cc: c.cc, ...m} : {cc: c.cc, effect: "", param: "", outMin: 0, outMax: 1};
+	}).filter((p) => p.effect);
+
 	window.s1Midi = {
 		S1_MIDI_CHANNEL,
+		S1_CONTROLS,
 		S1_PRESETS,
+		DEFAULT_MAPS,
 		isLikelyS1Port,
 		init,
+		getMap,
+		setMap,
+		setMapRange,
+		clearMap,
+		resetMaps,
+		listShaderTargets,
+		isDefaultMap,
+		mappingStatus,
+		getDeviceInfo() {
+			return {
+				name: deviceName,
+				inputCount,
+				channel: S1_MIDI_CHANNEL + 1,
+			};
+		},
+		onChange(fn) {
+			listeners.add(fn);
+			return () => listeners.delete(fn);
+		},
+		getLastActivity() {
+			return {cc: lastCc, value7: lastValue7, at: lastAt};
+		},
 	};
 
 	init();
