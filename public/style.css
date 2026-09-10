@@ -453,6 +453,92 @@ canvas.p5Canvas.is-smooth {
 	cursor: default;
 }
 
+.midi-panel__notes {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-height: 28vh;
+	overflow: hidden;
+}
+
+.midi-panel__notes-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.midi-panel__notes-title {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	opacity: 0.75;
+}
+
+.midi-panel__notes-hint {
+	margin: 0;
+	font-size: 10px;
+	line-height: 1.35;
+	opacity: 0.55;
+}
+
+.midi-panel__notes-list {
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-height: 0;
+}
+
+.midi-panel__notes-empty {
+	font-size: 11px;
+	opacity: 0.45;
+	padding: 4px 0;
+}
+
+.midi-panel__note-row {
+	display: grid;
+	grid-template-columns: minmax(4.5rem, auto) 1fr minmax(4.5rem, auto) auto auto;
+	gap: 4px;
+	align-items: center;
+	padding: 4px 6px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid transparent;
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.midi-panel__note-row.is-active {
+	border-color: rgba(120, 200, 255, 0.45);
+	background: rgba(80, 140, 200, 0.12);
+}
+
+.midi-panel__note-label {
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.midi-panel__mode {
+	min-width: 0;
+}
+
+.midi-panel__badge--mode {
+	font-size: 9px;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	opacity: 0.8;
+}
+
+.midi-panel__badge--mode.is-latch {
+	color: #9fd4ff;
+}
+
 .midi-panel__footer {
 	display: flex;
 	gap: 6px;

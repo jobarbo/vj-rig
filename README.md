@@ -24,7 +24,7 @@ Optional seed: `http://localhost:3301/?seed=my-show-seed`
 | `L` | Loop countdown |
 | `C` | Toggle download controls |
 | `G` | Symmetry debug |
-| `M` | S-1 MIDI map panel (knob → shader) |
+| `M` | S-1 MIDI map panel (knobs + keyboard → effects) |
 | `0`–`9` | Scene select (buffered, e.g. `1` `2` → scene 12) |
 
 ## Roland S-1 (MIDI + USB audio)
@@ -38,6 +38,8 @@ Use the S-1 as a linked performance controller: turning Filter / LFO / ENV knobs
 3. Click the canvas once to unlock audio + MIDI permissions.
 
 **Map panel (`M`)** — pick a shader param for each S-1 knob. Mappings persist in `localStorage` (`vjS1Maps`). **Reset defaults** restores the table below. **Clock overlay** toggles the OSC MIDI-clock HUD (formerly key M).
+
+**Keyboard → effects** (same panel) — **Learn note**, then assign a shader effect. **Hold** (default): Note On enables, Note Off disables. **Latch**: each Note On flips enable; Note Off ignored. Uses `setEffectEnabled` (pipeline rebuild). Note maps persist in `vjS1NoteMaps` (MIDI channel 3). Knobs stay CC-only.
 
 **Default CC map** (MIDI channel 3):
 

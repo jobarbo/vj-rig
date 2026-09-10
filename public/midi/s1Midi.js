@@ -1,14 +1,17 @@
 /**
- * Roland S-1 → shader mappings (Web MIDI CC, channel 3 by default).
+ * Roland S-1 → shader mappings (Web MIDI CC + Note On/Off, channel 3 by default).
  *
  * Controllers listed in S1_CONTROLS can be remapped via the MIDI panel (key M).
  * Defaults come from DEFAULT_MAPS; user overrides persist in localStorage (vjS1Maps).
+ * Keyboard notes toggle effect enable (vjS1NoteMaps): Hold or Latch via setEffectEnabled.
  *
  * Learn bindings (midiLearn / panel E·V) still win for the same (cc, channel).
  */
 (function () {
 	const S1_MIDI_CHANNEL = 2; // MIDI channel 3 (0-indexed)
 	const STORAGE_KEY = "vjS1Maps";
+	const NOTE_STORAGE_KEY = "vjS1NoteMaps";
+	const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 	/** Front-panel continuous knobs available for mapping. */
 	const S1_CONTROLS = [
@@ -54,12 +57,20 @@
 
 	/** @type {Map<number, object|null>} null = explicitly unmapped */
 	const mapsByCc = new Map();
+	/** @type {Map<number, {effect:string, mode:"hold"|"latch"}>} */
+	const noteMaps = new Map();
+	/** @type {Map<string, Set<number>>} effect -> held notes (hold mode) */
+	const heldByEffect = new Map();
 	const listeners = new Set();
 	let lastCc = null;
 	let lastValue7 = 0;
 	let lastAt = 0;
+	let lastNote = null;
+	let lastNoteOn = false;
+	let lastNoteAt = 0;
 	let deviceName = null;
 	let inputCount = 0;
+	let noteLearnCallback = null;
 
 	function isLikelyS1Port(name) {
 		const n = String(name || "").toLowerCase();
@@ -245,6 +256,154 @@
 		return out;
 	}
 
+	function listEffectNames() {
+		const cfg = typeof shaderEffects !== "undefined" ? shaderEffects.effectsConfig : null;
+		if (!cfg) return [];
+		return Object.keys(cfg).sort((a, b) => a.localeCompare(b));
+	}
+
+	function noteLabel(note) {
+		const n = Math.min(127, Math.max(0, Number(note) || 0));
+		const name = NOTE_NAMES[n % 12];
+		const octave = Math.floor(n / 12) - 1;
+		return `${name}${octave} · ${n}`;
+	}
+
+	function loadNoteMaps() {
+		noteMaps.clear();
+		try {
+			const raw = localStorage.getItem(NOTE_STORAGE_KEY);
+			if (!raw) return;
+			const saved = JSON.parse(raw);
+			if (!saved || typeof saved !== "object") return;
+			for (const [noteStr, map] of Object.entries(saved)) {
+				const note = Number(noteStr);
+				if (!Number.isFinite(note) || !map?.effect) continue;
+				const mode = map.mode === "latch" ? "latch" : "hold";
+				noteMaps.set(note, {effect: map.effect, mode});
+			}
+		} catch (err) {
+			console.warn("[s1Midi] failed to load note maps:", err);
+		}
+	}
+
+	function persistNoteMaps() {
+		const out = {};
+		for (const [note, map] of noteMaps) {
+			out[note] = {effect: map.effect, mode: map.mode};
+		}
+		try {
+			localStorage.setItem(NOTE_STORAGE_KEY, JSON.stringify(out));
+		} catch (err) {
+			console.warn("[s1Midi] failed to persist note maps:", err);
+		}
+	}
+
+	function getNoteMap(note) {
+		return noteMaps.get(Number(note)) || null;
+	}
+
+	function listNoteMaps() {
+		return [...noteMaps.entries()]
+			.map(([note, map]) => ({note, ...map, label: noteLabel(note)}))
+			.sort((a, b) => a.note - b.note);
+	}
+
+	function setNoteMap(note, effect, mode = "hold") {
+		const n = Number(note);
+		if (!Number.isFinite(n) || n < 0 || n > 127) return;
+		if (!effect) {
+			clearNoteMap(n);
+			return;
+		}
+		const m = mode === "latch" ? "latch" : "hold";
+		noteMaps.set(n, {effect, mode: m});
+		persistNoteMaps();
+		notify();
+	}
+
+	function clearNoteMap(note) {
+		const n = Number(note);
+		const map = noteMaps.get(n);
+		if (map) {
+			const held = heldByEffect.get(map.effect);
+			if (held) {
+				held.delete(n);
+				if (held.size === 0) heldByEffect.delete(map.effect);
+			}
+		}
+		noteMaps.delete(n);
+		persistNoteMaps();
+		notify();
+	}
+
+	function startNoteLearn(onBound) {
+		noteLearnCallback = typeof onBound === "function" ? onBound : null;
+	}
+
+	function cancelNoteLearn() {
+		const cb = noteLearnCallback;
+		noteLearnCallback = null;
+		cb?.(null);
+	}
+
+	function setEffectEnabledSafe(effect, enabled) {
+		if (typeof shaderEffects === "undefined" || typeof shaderEffects.setEffectEnabled !== "function") return;
+		const cfg = shaderEffects.effectsConfig?.[effect];
+		if (!cfg) return;
+		if (!!cfg.enabled === !!enabled) return;
+		shaderEffects.setEffectEnabled(effect, enabled);
+		if (typeof shaderEffectsPanel !== "undefined" && typeof shaderEffectsPanel._scheduleSave === "function") {
+			shaderEffectsPanel._scheduleSave();
+		} else if (typeof shaderEffects.savePersistedPanelConfig === "function") {
+			shaderEffects.savePersistedPanelConfig();
+		}
+	}
+
+	function applyNoteOn(note) {
+		const map = noteMaps.get(note);
+		if (!map?.effect) return;
+
+		lastNote = note;
+		lastNoteOn = true;
+		lastNoteAt = performance.now();
+
+		if (map.mode === "latch") {
+			const cur = !!shaderEffects?.effectsConfig?.[map.effect]?.enabled;
+			setEffectEnabledSafe(map.effect, !cur);
+			notify();
+			return;
+		}
+
+		// hold
+		if (!heldByEffect.has(map.effect)) heldByEffect.set(map.effect, new Set());
+		heldByEffect.get(map.effect).add(note);
+		setEffectEnabledSafe(map.effect, true);
+		notify();
+	}
+
+	function applyNoteOff(note) {
+		const map = noteMaps.get(note);
+		lastNote = note;
+		lastNoteOn = false;
+		lastNoteAt = performance.now();
+
+		if (!map?.effect || map.mode === "latch") {
+			notify();
+			return;
+		}
+
+		const held = heldByEffect.get(map.effect);
+		if (held) {
+			held.delete(note);
+			if (held.size === 0) {
+				heldByEffect.delete(map.effect);
+				setEffectEnabledSafe(map.effect, false);
+			}
+		}
+		notify();
+	}
+
 	function map7(value7, outMin, outMax, integer) {
 		const t = Math.min(127, Math.max(0, value7)) / 127;
 		let v = outMin + t * (outMax - outMin);
@@ -298,9 +457,38 @@
 
 	function onMessage(e) {
 		const status = e.data[0];
-		if ((status & 0xf0) !== 0xb0) return;
-
+		const type = status & 0xf0;
 		const channel = status & 0x0f;
+
+		// Notes: 0x90 velocity>0 = on; 0x80 or 0x90 velocity0 = off
+		if (type === 0x90 || type === 0x80) {
+			const note = e.data[1];
+			const velocity = e.data[2];
+			const isOn = type === 0x90 && velocity > 0;
+
+			if (isOn && noteLearnCallback) {
+				const cb = noteLearnCallback;
+				noteLearnCallback = null;
+				const effects = listEffectNames();
+				const defaultEffect = effects[0] || "";
+				if (defaultEffect) setNoteMap(note, defaultEffect, "hold");
+				else {
+					noteMaps.set(note, {effect: "", mode: "hold"});
+					persistNoteMaps();
+					notify();
+				}
+				cb?.(note);
+				return;
+			}
+
+			if (channel !== S1_MIDI_CHANNEL) return;
+			if (isOn) applyNoteOn(note);
+			else applyNoteOff(note);
+			return;
+		}
+
+		if (type !== 0xb0) return;
+
 		const cc = e.data[1];
 		const value7 = e.data[2];
 
@@ -326,6 +514,7 @@
 
 	async function init() {
 		loadMaps();
+		loadNoteMaps();
 		reregisterLive();
 
 		if (!navigator.requestMIDIAccess) {
@@ -403,6 +592,14 @@
 		clearMap,
 		resetMaps,
 		listShaderTargets,
+		listEffectNames,
+		noteLabel,
+		getNoteMap,
+		setNoteMap,
+		clearNoteMap,
+		listNoteMaps,
+		startNoteLearn,
+		cancelNoteLearn,
 		isDefaultMap,
 		mappingStatus,
 		getDeviceInfo() {
@@ -418,6 +615,12 @@
 		},
 		getLastActivity() {
 			return {cc: lastCc, value7: lastValue7, at: lastAt};
+		},
+		getLastNoteActivity() {
+			return {note: lastNote, on: lastNoteOn, at: lastNoteAt};
+		},
+		isNoteLearning() {
+			return !!noteLearnCallback;
 		},
 	};
 
