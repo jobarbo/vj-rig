@@ -20,7 +20,9 @@
 
 const CANVAS_CONFIG = {
 	BASE_WIDTH: 1000,
+	// Long : short edge (e.g. 1.77). Combined with ORIENTATION → 1.77:1 or 1:1.77
 	ARTWORK_RATIO: 1.0,
+	ORIENTATION: "horizontal", // "horizontal" | "vertical"
 	ARTWORK_PADDING: 0.1,
 	WRAP_PADDING_FACTOR: 0.05,
 	SCALE_FACTOR_X: 1.0,
@@ -28,6 +30,11 @@ const CANVAS_CONFIG = {
 	FORCE_SIZE: false,
 	FIXED_WIDTH: 966,
 	FIXED_HEIGHT: 96,
+	// Shader output framing (final pass only).
+	// fitCanvas: true = no crop (full texture). false = object-fit cover with width:height.
+	// matchArtwork: true = derive width/height from ARTWORK_RATIO + ORIENTATION (or FIXED_*).
+	SHADER_RENDER: {fitCanvas: false, matchArtwork: true, width: 1, height: 1},
+	// Master shader animation speed — 1.0 = default, 0.5 = half, 2.0 = double
 	SHADER_ANIMATION_SPEED: 1.0,
 };
 
@@ -79,6 +86,9 @@ let ARTWORK_RATIO = 1.0;
 let DIM = 0;
 let MULTIPLIER = 1;
 
+// Independent rAF for panels / audio / MIDI so they stay live if draw() stops
+let panelLoopId = null;
+
 // ============================================================================
 // 3. CANVAS & LAYOUT
 // ============================================================================
@@ -95,11 +105,57 @@ function getCanvasDimensions() {
 		};
 	}
 
-	const ratio = CANVAS_CONFIG.ARTWORK_RATIO;
 	const viewportDim = min(windowWidth, windowHeight);
+	const layout = {
+		orientation: CANVAS_CONFIG.ORIENTATION === "vertical" ? "vertical" : "horizontal",
+		ratio: Math.max(Number(CANVAS_CONFIG.ARTWORK_RATIO) || 1, 0.01),
+		baseSize: CANVAS_CONFIG.BASE_WIDTH,
+	};
+
+	if (typeof computeArtworkLayout === "function") {
+		const sized = computeArtworkLayout(viewportDim, layout);
+		return {width: sized.width, height: sized.height};
+	}
+
+	// Fallback if artworkLayout.js is missing: ratio = long:short
+	const r = layout.ratio;
+	if (layout.orientation === "vertical") {
+		return {width: viewportDim / r, height: viewportDim};
+	}
+	return {width: viewportDim, height: viewportDim / r};
+}
+
+/**
+ * Resolve shader output framing from CANVAS_CONFIG.SHADER_RENDER.
+ * With matchArtwork, width/height follow ARTWORK_RATIO + ORIENTATION (or FIXED_*).
+ */
+function resolveShaderRender() {
+	const cfg = CANVAS_CONFIG.SHADER_RENDER || {};
+	const fitCanvas = Boolean(cfg.fitCanvas);
+
+	if (fitCanvas) {
+		return {fitCanvas: true, width: cfg.width ?? 1, height: cfg.height ?? 1};
+	}
+
+	if (cfg.matchArtwork !== false) {
+		if (CANVAS_CONFIG.FORCE_SIZE) {
+			return {
+				fitCanvas: false,
+				width: CANVAS_CONFIG.FIXED_WIDTH,
+				height: CANVAS_CONFIG.FIXED_HEIGHT,
+			};
+		}
+		const r = Math.max(Number(CANVAS_CONFIG.ARTWORK_RATIO) || 1, 0.01);
+		if (CANVAS_CONFIG.ORIENTATION === "vertical") {
+			return {fitCanvas: false, width: 1, height: r};
+		}
+		return {fitCanvas: false, width: r, height: 1};
+	}
+
 	return {
-		width: viewportDim / ratio,
-		height: viewportDim,
+		fitCanvas: false,
+		width: cfg.width ?? 1,
+		height: cfg.height ?? 1,
 	};
 }
 
@@ -137,22 +193,20 @@ function initDisplayCanvas(canvasW, canvasH) {
 		const displayCanvas = createCanvas(canvasW, canvasH, WEBGL);
 		displayCanvas.pixelDensity(pixel_density);
 
-		let restoredPanel = null;
+		// Restore panel edits from localStorage before setup (wins over CANVAS_CONFIG output)
+		let restoredPanel = false;
 		if (PERSIST_SHADER_PANEL && typeof shaderEffects.loadPersistedPanelConfig === "function") {
-			restoredPanel = shaderEffects.loadPersistedPanelConfig();
+			restoredPanel = !!shaderEffects.loadPersistedPanelConfig();
 			if (restoredPanel) console.log("[sketch] restored shader panel config from localStorage");
 		}
+		if (!restoredPanel) {
+			shaderEffects.setRenderRatio(resolveShaderRender());
+			if (typeof shaderEffects.setAnimationSpeed === "function") {
+				shaderEffects.setAnimationSpeed(CANVAS_CONFIG.SHADER_ANIMATION_SPEED);
+			}
+		}
 
-		// Render ratio is configured in shaderManager (constructor or setRenderRatio).
-		// To override from the sketch, set CANVAS_CONFIG.SHADER_RENDER before setup runs.
-		// Skipped when a persisted panel config already restored its own render ratio.
-		if (!restoredPanel && CANVAS_CONFIG.SHADER_RENDER) {
-			shaderManager.setRenderRatio(CANVAS_CONFIG.SHADER_RENDER);
-		}
 		shaderEffects.setup(width, height, mainCanvas, displayCanvas, pixel_density);
-		if (typeof shaderEffects.setAnimationSpeed === "function") {
-			shaderEffects.setAnimationSpeed(CANVAS_CONFIG.SHADER_ANIMATION_SPEED);
-		}
 		console.log("Shader effects initialized successfully");
 		return displayCanvas;
 	} catch (error) {
@@ -248,6 +302,22 @@ function setupMidiClockOsc() {
 	midiClockOsc.setOverlayVisible(MIDI_CLOCK_CONFIG.SHOW_OVERLAY);
 }
 
+// Panels / audio / MIDI run on their own rAF so they stay live independently of
+// the artwork draw loop (which can stop on completion via noLoop()).
+function startPanelLoop() {
+	if (panelLoopId !== null) return;
+	const tick = () => {
+		if (typeof audioKnob !== "undefined") audioKnob.update();
+		if (typeof debugPanel !== "undefined") debugPanel.update();
+		if (typeof shaderEffectsPanel !== "undefined") shaderEffectsPanel.update();
+		window.scenePanel?.update();
+		updateKnobSmoothing();
+		if (typeof midiClockOsc !== "undefined") midiClockOsc.update();
+		panelLoopId = requestAnimationFrame(tick);
+	};
+	panelLoopId = requestAnimationFrame(tick);
+}
+
 // ============================================================================
 // 6. UI CONTROLS
 // ============================================================================
@@ -332,6 +402,8 @@ async function setup() {
 
 	await initScenes(canvasW, canvasH);
 
+	startPanelLoop();
+
 	if (typeof createDownloadButton === "function") {
 		createDownloadButton();
 	}
@@ -345,15 +417,10 @@ async function setup() {
 // Nothing awaited here may reject: p5 schedules the next requestAnimationFrame
 // AFTER awaiting draw(), so one unhandled rejection would freeze the rig for
 // good. sceneHost.update() is a total function by contract.
+//
+// Panel / audio / MIDI updates live in startPanelLoop(), not here.
 async function draw() {
 	mainCanvas.background(330, 100, 0, 100);
-
-	if (typeof audioKnob !== "undefined") audioKnob.update();
-	if (typeof debugPanel !== "undefined") debugPanel.update();
-	if (typeof shaderEffectsPanel !== "undefined") shaderEffectsPanel.update();
-	window.scenePanel?.update();
-	updateKnobSmoothing();
-	if (typeof midiClockOsc !== "undefined") midiClockOsc.update();
 
 	const maxFrames = config.animation.maxFrames;
 	if (maxFrames == null || sketchFrame < maxFrames) {
