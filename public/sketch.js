@@ -270,7 +270,7 @@ function setupAudioReactive() {
 	if (typeof audioKnob === "undefined") return;
 
 	audioKnob
-		.setSource("microphone") // or 'chime'
+		.setSource("s1") // Roland S-1 USB audio; falls back to default mic if not found
 		// energy is already volume^1.4 — keep stepFrom moderate or the param stays pegged at outMin
 		.map("energy", "zoom", "zoomOutAmount", 1.0, 5.4, 0, 1, 1.4, 0.35)
 		.map("bass", "pixelSort", "sortAmount", 0, 28, 0, 1, 2.2, 0.65)
@@ -292,8 +292,9 @@ function setupAudioReactive() {
 function setupMidiKnobs() {
 	if (typeof shaderEffects === "undefined") return;
 
+	// S-1 CC13 (LFO Pitch) → rotation angle, smoothed (see public/midi/s1Midi.js presets)
 	const initAngle = shaderEffects.effectsConfig.symmetry.rotationStartingAngle;
-	addKnobSmooth(32, "symmetry", "rotationStartingAngle", initAngle, 0.08);
+	addKnobSmooth(13, "symmetry", "rotationStartingAngle", initAngle, 0.08);
 }
 
 function setupMidiClockOsc() {

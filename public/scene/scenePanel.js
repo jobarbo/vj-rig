@@ -229,13 +229,14 @@ class ScenePanel {
 		learnBtn.textContent = "learn";
 		learnBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const midi = window.sceneMidi;
+			const midi = window.midiLearn || window.sceneMidi;
 			if (!midi) return;
-			if (midi.learning === def.name) {
+			const learningThis = midi.learning?.effect === "scene" && midi.learning?.param === def.name;
+			if (learningThis) {
 				midi.cancelLearn();
 				learnBtn.textContent = "learn";
 			} else {
-				midi.startLearn(def.name, () => {
+				midi.startLearn("scene", def.name, () => {
 					learnBtn.textContent = "learn";
 				});
 				learnBtn.textContent = "…";

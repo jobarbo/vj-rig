@@ -207,14 +207,13 @@ if you click it to take manual control back.
 ### MIDI
 
 Click **learn** next to a param, then turn a hardware knob — the next CC
-message received binds to it. Bindings are independent of `knob.js` (the
-Grid's CC 32–39): this uses its own `requestMIDIAccess()` and
-`addEventListener("midimessage", …)`, so pick a different CC range (40+ is a
-reasonable convention) to avoid confusing overlap, though nothing enforces it.
+binds to it and is saved in `localStorage`. Learned bindings override the
+Roland S-1 presets in `public/midi/s1Midi.js` for the same `(cc, channel)`.
 
 A binding is keyed by param name only, not by scene — like an audio mapping,
 it stays live across a scene switch and simply does nothing if the new scene
-has no param by that name.
+has no param by that name. Shader params in panel **E** use the same Learn
+button (keyed as `effect.param`).
 
 ---
 
