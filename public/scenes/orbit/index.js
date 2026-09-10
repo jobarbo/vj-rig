@@ -32,7 +32,7 @@ export function setup(ctx) {
 
 export function draw(ctx) {
 	const p = ctx.p;
-	p.background(330, 100, 0, 100);
+	p.background(55, 100, 50, 100);
 
 	for (const mover of ctx.movers) {
 		mover.show(p);
