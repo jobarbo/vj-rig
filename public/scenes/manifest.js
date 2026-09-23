@@ -20,8 +20,8 @@
 // anything set here wins.
 
 export const SCENES = [
-	{id: "orbit", name: "Orbit", kind: "p5"},
 	{id: "plasma", name: "Plasma", kind: "glsl"},
+	{id: "orbit", name: "Orbit", kind: "p5"},
 	{id: "camera", name: "Camera", kind: "camera"},
 	{id: "_spike", name: "Spike (dev)", kind: "p5"},
 ];

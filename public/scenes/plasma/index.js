@@ -16,7 +16,7 @@ export const meta = {
 	flipY: false,
 	params: [
 		{name: "speed", label: "Speed", min: 0, max: 4, value: 1},
-		{name: "scale", label: "Scale", min: 1, max: 40, value: 8},
-		{name: "warp", label: "Warp", min: 0, max: 2, value: 0.4},
+		{name: "scale", label: "Scale", min: 1, max: 40, value: 19},
+		{name: "warp", label: "Warp", min: 0, max: 2, value: 1},
 	],
 };
