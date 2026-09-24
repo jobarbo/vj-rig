@@ -272,7 +272,8 @@ function setupAudioReactive() {
 	audioKnob
 		.setSource("s1") // Roland S-1 USB audio; falls back to default mic if not found
 		// energy is already volume^1.4 — keep stepFrom moderate or the param stays pegged at outMin
-		.map("energy", "zoom", "zoomOutAmount", 1.0, 5.4, 0, 1, 1.4, 0.35)
+		// same 1.0–5.4 travel; smooth eases the follow so peaks and drops don't snap
+		.map("energy", "zoom", "zoomOutAmount", 1.0, 5.4, 0, 1, 1.4, 0.35, 0.92)
 		.map("bass", "pixelSort", "sortAmount", 0, 28, 0, 1, 2.2, 0.65)
 		// higher energy → lower threshold (more pixels sorted)
 		.map("energy", "pixelSort", "threshold", 0.55, 0.1, 0, 1, 1.2, 0.35);

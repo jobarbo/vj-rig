@@ -15,8 +15,9 @@ export const meta = {
 	smooth: true,
 	flipY: false,
 	params: [
-		{name: "speed", label: "Speed", min: 0, max: 4, value: 1},
-		{name: "scale", label: "Scale", min: 1, max: 40, value: 19},
-		{name: "warp", label: "Warp", min: 0, max: 2, value: 1},
+		// uSpeed replaces Shadertoy's iTime
+		{name: "speed", label: "Speed", min: 0, max: 4, value: 1, step: 0.01},
+		// uScale multiplies the line density (Shadertoy used 10)
+		{name: "scale", label: "Scale", min: 0.25, max: 4, value: 1, step: 0.01},
 	],
 };

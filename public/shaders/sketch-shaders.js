@@ -157,6 +157,7 @@ class ShaderEffects {
 				translationSpeedY: 0.5, // Vertical translation speed (0 = none)
 				translationMode: 3.0, // 0=sine, 1=noise, 2=FBM, 3=vector field, 4=continuous scroll
 				translationNoiseScale: 0.5, // Scale of noise variation (lower = smoother, higher = more frequent changes)
+				translationAmount: [0.0, 0.0], // static UV offset [-1..1] (applied even when animation is off)
 				translationPhaseX: -0.5, // Accumulated phase for X (internal — not shown in panel)
 				translationPhaseY: 0.5, // Accumulated phase for Y (internal — not shown in panel)
 				rotationEnabled: 1.0, // Master toggle for animated rotation
@@ -181,6 +182,7 @@ class ShaderEffects {
 					uTranslationSpeedY: "translationSpeedY",
 					uTranslationMode: "translationMode",
 					uTranslationNoiseScale: "translationNoiseScale",
+					uTranslationAmount: "translationAmount",
 					uTranslationPhaseX: "translationPhaseX",
 					uTranslationPhaseY: "translationPhaseY",
 					uRotationEnabled: "rotationEnabled",
@@ -204,6 +206,7 @@ class ShaderEffects {
 				translationSpeedY: 1.5, // Vertical translation speed (0 = none)
 				translationMode: 3.0, // 0=sine, 1=noise, 2=FBM, 3=vector field, 4=continuous scroll
 				translationNoiseScale: 0.2, // Scale of noise variation (lower = smoother, higher = more frequent changes)
+				translationAmount: [0.0, 0.0], // static UV offset [-1..1] (applied even when animation is off)
 				translationPhaseX: -0.5, // Accumulated phase for X (internal — not shown in panel)
 				translationPhaseY: 0.5, // Accumulated phase for Y (internal — not shown in panel)
 				rotationEnabled: 1.0, // Master toggle for animated rotation
@@ -228,6 +231,7 @@ class ShaderEffects {
 					uTranslationSpeedY: "translationSpeedY",
 					uTranslationMode: "translationMode",
 					uTranslationNoiseScale: "translationNoiseScale",
+					uTranslationAmount: "translationAmount",
 					uTranslationPhaseX: "translationPhaseX",
 					uTranslationPhaseY: "translationPhaseY",
 					uRotationEnabled: "rotationEnabled",
@@ -563,19 +567,9 @@ class ShaderEffects {
 			},
 		};
 
-		// Default templates for create-from-dropdown (survive delete of last instance)
-		this.effectTemplates = {};
-		for (const [name, cfg] of Object.entries(this.effectsConfig)) {
-			const root = String(name).replace(/\d+$/, "") || name;
-			if (this.effectTemplates[root]) continue;
-			const template = JSON.parse(JSON.stringify(cfg));
-			template.enabled = false;
-			template.pass = cfg.pass || root;
-			delete template._initialTranslationPhaseX;
-			delete template._initialTranslationPhaseY;
-			delete template._initialRotationPhase;
-			this.effectTemplates[root] = template;
-		}
+		// Default templates for create-from-dropdown (survive delete of last instance).
+		// preload() recaptures these after new shader uniforms are bound.
+		this._captureEffectTemplates();
 
 		// Snapshot of built-in defaults, used by resetToDefaultPanelConfig()
 		this._defaultPanelConfig = this._buildPanelConfigSnapshot();
@@ -588,6 +582,169 @@ class ShaderEffects {
 		this.lastFrameTime = performance.now();
 		this.currentFPS = 0;
 		this.fpsElement = null;
+	}
+
+	/**
+	 * Shaders this rig loads. Fragment paths are also fetched so any uniform
+	 * the shader declares can get a panel control.
+	 */
+	_shaderLoadList() {
+		return [
+			["copy", "copy/fragment.frag", "copy/vertex.vert"],
+			["deform", "deform/fragment.frag", "deform/vertex.vert"],
+			["glitchDisplacement", "glitch-displacement/fragment.frag", "glitch-displacement/vertex.vert"],
+			["chromatic", "chromatic-aberration/fragment.frag", "chromatic-aberration/vertex.vert"],
+			["grain", "grain/fragment.frag", "grain/vertex.vert"],
+			["collage", "collage-rotate/fragment.frag", "collage-rotate/vertex.vert"],
+			["pixelSort", "pixel-sort/fragment.frag", "pixel-sort/vertex.vert"],
+			["asdfSort", "asdf-sort/fragment.frag", "asdf-sort/vertex.vert"],
+			["crtDisplay", "pixel-checker/fragment.frag", "pixel-checker/vertex.vert"],
+			["symmetry", "symmetry/fragment.frag", "symmetry/vertex.vert"],
+			["symmetry2", "symmetry/fragment.frag", "symmetry/vertex.vert"],
+			["loaderGlitch", "loader-glitch/fragment.frag", "loader-glitch/vertex.vert"],
+			["pixelGrid", "pixel-grid/fragment.frag", "pixel-grid/vertex.vert"],
+			["blur", "blur/fragment.frag", "blur/vertex.vert"],
+			["zoom", "zoom/fragment.frag", "zoom/vertex.vert"],
+			["crtWarp", "crt-warp/fragment.frag", "crt-warp/vertex.vert"],
+			["wave", "wave/fragment.frag", "wave/vertex.frag"],
+			["colorQuantize", "color-quantize/fragment.frag", "color-quantize/vertex.vert"],
+			["dither", "dither/fragment.frag", "dither/vertex.vert"],
+		];
+	}
+
+	_captureEffectTemplates() {
+		this.effectTemplates = {};
+		for (const [name, cfg] of Object.entries(this.effectsConfig)) {
+			const root = String(name).replace(/\d+$/, "") || name;
+			if (this.effectTemplates[root]) continue;
+			const template = JSON.parse(JSON.stringify(cfg));
+			template.enabled = false;
+			template.pass = cfg.pass || root;
+			delete template._initialTranslationPhaseX;
+			delete template._initialTranslationPhaseY;
+			delete template._initialRotationPhase;
+			this.effectTemplates[root] = template;
+		}
+	}
+
+	/**
+	 * GLSL uniform declarations. Engine inputs (texture, time, seed, phase)
+	 * stay off the panel; everything else can be a slider.
+	 */
+	_parseShaderUniforms(source) {
+		const found = [];
+		const re = /^\s*uniform\s+(sampler2D|samplerCube|float|int|bool|vec[234]|mat[234])\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/gm;
+		let match;
+		while ((match = re.exec(source))) {
+			found.push({type: match[1], name: match[2]});
+		}
+		return found;
+	}
+
+	_isPanelUniform(uniform) {
+		const {type, name} = uniform;
+		if (type.startsWith("sampler") || type.startsWith("mat")) return false;
+		if (name === "uTexture" || name === "uResolution" || name === "uTime" || name === "uSeed" || name === "uProgress" || name === "uRenderDensity") {
+			return false;
+		}
+		// Accumulated internally so speed changes don't jump.
+		if (name.includes("Phase")) return false;
+		return true;
+	}
+
+	_uniformParamName(uniformName) {
+		if (uniformName.startsWith("u") && uniformName.length > 1 && uniformName[1] === uniformName[1].toUpperCase()) {
+			return uniformName[1].toLowerCase() + uniformName.slice(2);
+		}
+		return uniformName;
+	}
+
+	/**
+	 * Unset WebGL uniforms are 0, so a new control starts there and the image
+	 * stays put until the slider moves.
+	 */
+	_defaultUniformValue(type) {
+		if (type === "float" || type === "int" || type === "bool") return 0;
+		if (type === "vec2") return [0, 0];
+		if (type === "vec3") return [0, 0, 0];
+		if (type === "vec4") return [0, 0, 0, 0];
+		return null;
+	}
+
+	_shaderNameForEffect(effectName, effect) {
+		const paths = this._shaderFragPaths || {};
+		if (effect.pass && paths[effect.pass]) return effect.pass;
+		if (paths[effectName]) return effectName;
+		const root = String(effectName).replace(/\d+$/, "") || effectName;
+		if (paths[root]) return root;
+		return null;
+	}
+
+	_attachUniformParam(effect, param, value, uniformName) {
+		if (!(param in effect)) {
+			const next = {};
+			let inserted = false;
+			for (const [key, current] of Object.entries(effect)) {
+				if (key === "uniforms") {
+					next[param] = value;
+					inserted = true;
+				}
+				next[key] = current;
+			}
+			if (!inserted) next[param] = value;
+			if (!next.uniforms) next.uniforms = {};
+			for (const key of Object.keys(effect)) delete effect[key];
+			Object.assign(effect, next);
+		}
+		effect.uniforms[uniformName] = param;
+	}
+
+	/**
+	 * Add a panel param + uniform binding for every shader uniform this rig
+	 * does not already drive. Runs before saved panel config is restored.
+	 */
+	async _bindUnmappedShaderUniforms() {
+		const paths = this._shaderFragPaths || {};
+		const parsed = {};
+		await Promise.all(
+			Object.entries(paths).map(async ([shaderName, url]) => {
+				try {
+					const response = await fetch(url);
+					if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+					parsed[shaderName] = this._parseShaderUniforms(await response.text());
+				} catch (error) {
+					console.warn(`[ShaderEffects] could not read uniforms for "${shaderName}":`, error);
+					parsed[shaderName] = [];
+				}
+			}),
+		);
+
+		const added = [];
+		for (const [effectName, effect] of Object.entries(this.effectsConfig)) {
+			const shaderName = this._shaderNameForEffect(effectName, effect);
+			if (!shaderName) continue;
+			if (!effect.uniforms) effect.uniforms = {};
+
+			for (const uniform of parsed[shaderName] || []) {
+				if (!this._isPanelUniform(uniform)) continue;
+				if (Object.prototype.hasOwnProperty.call(effect.uniforms, uniform.name)) continue;
+
+				const param = this._uniformParamName(uniform.name);
+				const value = this._defaultUniformValue(uniform.type);
+				if (value == null) continue;
+				const created = !(param in effect);
+				this._attachUniformParam(effect, param, value, uniform.name);
+				if (created) added.push(`${effectName}.${param}`);
+			}
+		}
+
+		this._captureEffectTemplates();
+		this._defaultPanelConfig = this._buildPanelConfigSnapshot();
+
+		if (added.length) {
+			console.log(`[ShaderEffects] panel controls for shader uniforms: ${added.join(", ")}`);
+		}
+		return added;
 	}
 
 	/**
@@ -604,28 +761,12 @@ class ShaderEffects {
 		// Set default vertex shader
 		shaderManager.setDefaultVertex("chromatic-aberration/vertex.vert");
 
-		// Load shaders - customize this list for your sketch
-		await Promise.all([
-			shaderManager.loadShader("copy", "copy/fragment.frag", "copy/vertex.vert"),
-			shaderManager.loadShader("deform", "deform/fragment.frag", "deform/vertex.vert"),
-			shaderManager.loadShader("glitchDisplacement", "glitch-displacement/fragment.frag", "glitch-displacement/vertex.vert"),
-			shaderManager.loadShader("chromatic", "chromatic-aberration/fragment.frag", "chromatic-aberration/vertex.vert"),
-			shaderManager.loadShader("grain", "grain/fragment.frag", "grain/vertex.vert"),
-			shaderManager.loadShader("collage", "collage-rotate/fragment.frag", "collage-rotate/vertex.vert"),
-			shaderManager.loadShader("pixelSort", "pixel-sort/fragment.frag", "pixel-sort/vertex.vert"),
-			shaderManager.loadShader("asdfSort", "asdf-sort/fragment.frag", "asdf-sort/vertex.vert"),
-			shaderManager.loadShader("crtDisplay", "pixel-checker/fragment.frag", "pixel-checker/vertex.vert"),
-			shaderManager.loadShader("symmetry", "symmetry/fragment.frag", "symmetry/vertex.vert"),
-			shaderManager.loadShader("symmetry2", "symmetry/fragment.frag", "symmetry/vertex.vert"),
-			shaderManager.loadShader("loaderGlitch", "loader-glitch/fragment.frag", "loader-glitch/vertex.vert"),
-			shaderManager.loadShader("pixelGrid", "pixel-grid/fragment.frag", "pixel-grid/vertex.vert"),
-			shaderManager.loadShader("blur", "blur/fragment.frag", "blur/vertex.vert"),
-			shaderManager.loadShader("zoom", "zoom/fragment.frag", "zoom/vertex.vert"),
-			shaderManager.loadShader("crtWarp", "crt-warp/fragment.frag", "crt-warp/vertex.vert"),
-			shaderManager.loadShader("wave", "wave/fragment.frag", "wave/vertex.frag"),
-			shaderManager.loadShader("colorQuantize", "color-quantize/fragment.frag", "color-quantize/vertex.vert"),
-			shaderManager.loadShader("dither", "dither/fragment.frag", "dither/vertex.vert"),
-		]);
+		const shaderFiles = this._shaderLoadList();
+		const basePath = shaderManager.basePath || "library/shaders/";
+		this._shaderFragPaths = Object.fromEntries(shaderFiles.map(([name, frag]) => [name, basePath + frag]));
+
+		await Promise.all(shaderFiles.map(([name, frag, vert]) => shaderManager.loadShader(name, frag, vert)));
+		await this._bindUnmappedShaderUniforms();
 
 		this.shaderManager = shaderManager;
 
