@@ -490,10 +490,13 @@
 		if (type !== 0xb0) return;
 
 		const cc = e.data[1];
-		const value7 = e.data[2];
+		const raw7 = e.data[2];
+		// Stepped knobs (LFO wave, OSC range…) send a few small values — stretch to 0–127
+		window.ccRange?.observe(channel, cc, raw7);
+		const value7 = window.ccRange ? window.ccRange.norm(channel, cc, raw7) * 127 : raw7;
 
 		lastCc = cc;
-		lastValue7 = value7;
+		lastValue7 = raw7;
 		lastAt = performance.now();
 		notify();
 
