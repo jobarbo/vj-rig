@@ -47,7 +47,7 @@ const SCENE_KEY_TIMEOUT_MS = 500;
 const DEBUG_CONFIG = {
 	DEFAULT_PIXEL_DENSITY_DESKTOP: 1,
 	DEFAULT_PIXEL_DENSITY_MOBILE: 1,
-	HELP_TEXT: "Controls: D debug · E shaders · L loop · C controls · G symmetry debug · M S-1 MIDI map · V scene params · digits = scene",
+	HELP_TEXT: "Controls: D debug · E shaders · L loop · C controls · G symmetry debug · M S-1 MIDI map · P plasma MIDI · V scene params · digits = scene",
 };
 
 const MIDI_CLOCK_CONFIG = {
@@ -313,6 +313,7 @@ function startPanelLoop() {
 		if (typeof debugPanel !== "undefined") debugPanel.update();
 		if (typeof shaderEffectsPanel !== "undefined") shaderEffectsPanel.update();
 		window.scenePanel?.update();
+		window.plasmaMidiPanel?.update();
 		window.midiPanel?.update();
 		updateKnobSmoothing();
 		if (typeof midiClockOsc !== "undefined") midiClockOsc.update();
@@ -475,6 +476,10 @@ function keyPressed() {
 
 	if (key === "V" || key === "v") {
 		window.scenePanel?.toggle();
+	}
+
+	if (key === "P" || key === "p") {
+		window.plasmaMidiPanel?.toggle();
 	}
 
 	// Scene selection: digits only, buffered like a vim count. "1" then "2"

@@ -11,6 +11,7 @@ import {createMediaScene} from "./runtime/mediaScene.js";
 import "./sceneParams.js"; // side effect: window.sceneParams
 import {scenePanel} from "./scenePanel.js";
 import {sceneMidi} from "./sceneMidi.js";
+import {plasmaMidi, plasmaMidiPanel} from "./plasmaMidi.js";
 
 registerRuntime("glsl", createGlslScene);
 registerRuntime("image", createMediaScene);
@@ -41,6 +42,8 @@ export async function bootScenes({width, height, pixelDensity = 1, initial} = {}
 
 	scenePanel.init();
 	sceneMidi.init(); // async; scene switching/params work before it resolves
+	plasmaMidiPanel.init();
+	plasmaMidi.init();
 
 	console.log(`[boot] scene system ready — ${SCENES.length} scene(s), active: ${host.currentId}`);
 	return host;

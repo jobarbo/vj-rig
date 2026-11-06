@@ -111,6 +111,25 @@ canvas.p5Canvas.is-smooth {
 	right: auto;
 }
 
+.plasma-midi-panel {
+	top: auto;
+	bottom: 12px;
+	left: 12px;
+	right: auto;
+	z-index: 9994;
+}
+
+.plasma-midi-panel__hint {
+	margin: 0 0 8px;
+	color: rgba(255, 255, 255, 0.55);
+}
+
+.plasma-midi-panel__value,
+.plasma-midi-panel__bind {
+	margin-left: 8px;
+	color: rgba(255, 255, 255, 0.7);
+}
+
 /* S-1 MIDI map panel */
 .midi-panel {
 	top: 12px;
