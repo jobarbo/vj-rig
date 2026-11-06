@@ -9,8 +9,18 @@ uniform vec2 uResolution;
 uniform float uTime;
 
 // One uniform per declared param: name -> "u" + PascalCase.
+// uTime and uResolution stay driven by the scene runtime.
 uniform float uSpeed;
+uniform float uTimeDiv;
 uniform float uScale;
+uniform float uZoom;
+uniform float uThickness;
+uniform float uFrequency;
+uniform float uEdge;
+uniform float uSoftness;
+uniform float uSpread;
+uniform float uBend;
+uniform float uGain;
 
 float hash(float n) {
 	return fract(sin(n) * 43758.5453);
@@ -25,13 +35,12 @@ float noise(vec2 x) {
 }
 
 mat2 rotate2d(float angle) {
-	return mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+	return mat2(cos(angle), -cos(angle), sin(angle), cos(angle));
 }
 
 float lines(vec2 pos, float b) {
-	float scale = 2.0 * uScale;
-	pos *= scale;
-	return smoothstep(30.0, 28.15 + b * 38.15, abs((sin(pos.x * 3.1415) + b * 2.0) * 30.0));
+	pos *= uScale;
+	return smoothstep(uEdge, uSoftness + b * uSpread, abs((sin(pos.x * uFrequency) + b * uBend) * uGain));
 }
 
 void main() {
@@ -41,9 +50,9 @@ void main() {
 	vec2 uv = fragCoord / uResolution.xy;
 	uv.y *= uResolution.y / uResolution.x;
 
-	vec2 pos = uv * vec2(2.5);
-	pos = rotate2d(noise(pos + uTime * uSpeed/3.0)) * pos;
-	float pattern = lines(pos, 0.1);
+	vec2 pos = uv * vec2(uZoom);
+	pos = rotate2d(noise(pos + uTime * uSpeed / max(uTimeDiv, 0.0001))) * pos;
+	float pattern = lines(pos, uThickness);
 
 	gl_FragColor = vec4(vec3(pattern), 1.0);
 }
