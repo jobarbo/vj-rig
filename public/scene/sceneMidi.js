@@ -11,8 +11,8 @@ const STORAGE_KEY = "vjMidiLearns";
 /** @type {Map<string, {cc:number, channel:number, effect:string, param:string, outMin?:number, outMax?:number, integer?:boolean, type?:string}>} */
 const bindings = new Map();
 
-function bindingKey(effectName, paramName) {
-	return `${effectName}.${paramName}`;
+function bindingKey(effectName, paramName, index) {
+	return index == null ? `${effectName}.${paramName}` : `${effectName}.${paramName}.${index}`;
 }
 
 function loadPersisted() {
@@ -24,7 +24,7 @@ function loadPersisted() {
 		for (const b of list) {
 			if (!b || typeof b.effect !== "string" || typeof b.param !== "string") continue;
 			if (!Number.isFinite(b.cc) || !Number.isFinite(b.channel)) continue;
-			bindings.set(bindingKey(b.effect, b.param), b);
+			bindings.set(bindingKey(b.effect, b.param, b.index), b);
 			if (typeof midiLiveControl !== "undefined") {
 				midiLiveControl.register(b.effect, b.param, `MIDI CC${b.cc}`);
 			}
@@ -56,6 +56,12 @@ function resolveRange(effectName, paramName) {
 		return {outMin: 0, outMax: 1};
 	}
 
+	// Same min/max as the slider in panel E
+	const slider = sliderRange({effect: effectName, param: paramName});
+	if (slider) return {outMin: slider.lo, outMax: slider.hi};
+	const panel = panelRange(paramName);
+	if (panel) return {outMin: panel.lo, outMax: panel.hi, integer: panel.integer};
+
 	// Prefer a matching S-1 preset range when present
 	const presets = window.s1Midi?.S1_PRESETS;
 	if (Array.isArray(presets)) {
@@ -79,13 +85,46 @@ function resolveRange(effectName, paramName) {
 	return {outMin: 0, outMax: 1};
 }
 
+/**
+ * Current min/max of the slider this binding drives, so the knob's 0–127 always
+ * spans the slider as it is now (ranges can change after the learn).
+ * Returns null when the slider isn't in the DOM; callers fall back to the stored range.
+ */
+function liveRange(binding) {
+	if (binding.effect === "scene") {
+		const def = (window.sceneHost?.current?.def?.meta?.params || []).find((d) => d.name === binding.param);
+		return def ? {lo: def.min ?? 0, hi: def.max ?? 1} : null;
+	}
+	return sliderRange(binding) || panelRange(binding.param);
+}
+
+/** Exact limits panel E uses for this param name (value-independent), or null. */
+function panelRange(paramName) {
+	const panel = typeof shaderEffectsPanel !== "undefined" ? shaderEffectsPanel : window.shaderEffectsPanel;
+	const r = panel?._paramLimits?.(paramName);
+	return r && Number.isFinite(r.min) && Number.isFinite(r.max) ? {lo: r.min, hi: r.max, integer: !!r.integer} : null;
+}
+
+/** min/max of the panel-E slider currently in the DOM, or null. */
+function sliderRange(binding) {
+	const esc = (s) => (window.CSS?.escape ? CSS.escape(String(s)) : String(s));
+	let sel = `input[type="range"].shader-effects-panel__slider[data-effect="${esc(binding.effect)}"][data-param="${esc(binding.param)}"]`;
+	sel += binding.index == null ? ":not([data-index])" : `[data-index="${binding.index}"]`;
+	const slider = document.querySelector(sel);
+	if (!slider) return null;
+	const lo = Number.parseFloat(slider.min);
+	const hi = Number.parseFloat(slider.max);
+	return Number.isFinite(lo) && Number.isFinite(hi) ? {lo, hi} : null;
+}
+
 function mapValue(binding, value7) {
 	const norm = Math.min(127, Math.max(0, value7)) / 127;
 	if (binding.type === "bool") return norm > 0.5 ? 1 : 0;
-	const lo = binding.outMin ?? 0;
-	const hi = binding.outMax ?? 1;
+	const live = liveRange(binding);
+	const lo = live?.lo ?? binding.outMin ?? 0;
+	const hi = live?.hi ?? binding.outMax ?? 1;
 	let v = lo + norm * (hi - lo);
-	if (binding.integer) v = Math.round(v);
+	if (binding.integer || live?.integer) v = Math.round(v);
 	return v;
 }
 
@@ -134,7 +173,7 @@ export const midiLearn = {
 	 * Bind the next CC to effect.param.
 	 * Legacy: startLearn(paramName, onBound) → scene.paramName
 	 */
-	startLearn(effectNameOrParam, paramNameOrCb, onBound) {
+	startLearn(effectNameOrParam, paramNameOrCb, onBound, extra) {
 		let effect;
 		let param;
 		let cb;
@@ -147,7 +186,7 @@ export const midiLearn = {
 			param = effectNameOrParam;
 			cb = paramNameOrCb || null;
 		}
-		this.learning = {effect, param};
+		this.learning = {effect, param, ...(extra || {})};
 		this._learnCallback = cb;
 	},
 
@@ -177,22 +216,29 @@ export const midiLearn = {
 
 		const channel = status & 0x0f;
 		const cc = e.data[1];
-		const value7 = e.data[2];
+		const raw7 = e.data[2];
+		// Stepped knobs (LFO wave, OSC range…) send a few small values — stretch to 0–127
+		window.ccRange?.observe(channel, cc, raw7);
+		const value7 = window.ccRange ? window.ccRange.norm(channel, cc, raw7) * 127 : raw7;
 
 		if (this.learning) {
-			const {effect, param} = this.learning;
-			const range = resolveRange(effect, param);
+			const {effect, param, index} = this.learning;
+			const hinted = Number.isFinite(this.learning.outMin) && Number.isFinite(this.learning.outMax);
+			const range = hinted
+				? {outMin: this.learning.outMin, outMax: this.learning.outMax, integer: !!this.learning.integer, type: this.learning.type}
+				: resolveRange(effect, param);
 			const entry = {
 				cc,
 				channel,
 				effect,
 				param,
+				index: index == null ? undefined : index,
 				outMin: range.outMin,
 				outMax: range.outMax,
 				integer: range.integer,
 				type: range.type,
 			};
-			bindings.set(bindingKey(effect, param), entry);
+			bindings.set(bindingKey(effect, param, entry.index), entry);
 			if (typeof midiLiveControl !== "undefined") {
 				midiLiveControl.register(effect, param, `MIDI CC${cc}`);
 			}
@@ -207,7 +253,7 @@ export const midiLearn = {
 
 		for (const binding of bindings.values()) {
 			if (binding.cc !== cc || binding.channel !== channel) continue;
-			const key = bindingKey(binding.effect, binding.param);
+			const key = bindingKey(binding.effect, binding.param, binding.index);
 			if (typeof midiLiveControl !== "undefined" && midiLiveControl.overrides.has(key)) continue;
 
 			if (binding.effect === "scene") {
@@ -217,7 +263,16 @@ export const midiLearn = {
 
 			const mapped = mapValue(binding, value7);
 			if (typeof shaderEffects !== "undefined") {
-				shaderEffects.updateEffectParam(binding.effect, binding.param, mapped);
+				if (binding.index != null) {
+					const cur = shaderEffects.effectsConfig?.[binding.effect]?.[binding.param];
+					if (Array.isArray(cur)) {
+						const next = cur.slice();
+						next[binding.index] = mapped;
+						shaderEffects.updateEffectParam(binding.effect, binding.param, next);
+					}
+				} else {
+					shaderEffects.updateEffectParam(binding.effect, binding.param, mapped);
+				}
 			}
 		}
 	},
