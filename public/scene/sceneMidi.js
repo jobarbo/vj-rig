@@ -11,6 +11,15 @@ const STORAGE_KEY = "vjMidiLearns";
 /** @type {Map<string, {cc:number, channel:number, effect:string, param:string, outMin?:number, outMax?:number, integer?:boolean, type?:string}>} */
 const bindings = new Map();
 
+/**
+ * MIDI-only ranges that win over the panel-E slider (which keeps its full range).
+ * Keyed by "effect.param"; applies to every index of an array param (X and Y).
+ */
+const MIDI_RANGE_OVERRIDES = {
+	// Pixel grid cell count: 1–127 per axis on a knob (panel slider goes to 1440)
+	"pixelGrid.gridSize": {lo: 1, hi: 127, integer: true},
+};
+
 function bindingKey(effectName, paramName, index) {
 	return index == null ? `${effectName}.${paramName}` : `${effectName}.${paramName}.${index}`;
 }
@@ -91,6 +100,8 @@ function resolveRange(effectName, paramName) {
  * Returns null when the slider isn't in the DOM; callers fall back to the stored range.
  */
 function liveRange(binding) {
+	const override = MIDI_RANGE_OVERRIDES[`${binding.effect}.${binding.param}`];
+	if (override) return override;
 	if (binding.effect === "scene") {
 		const def = (window.sceneHost?.current?.def?.meta?.params || []).find((d) => d.name === binding.param);
 		return def ? {lo: def.min ?? 0, hi: def.max ?? 1} : null;

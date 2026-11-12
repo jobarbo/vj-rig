@@ -24,6 +24,7 @@ export const SCENES = [
 	{id: "orbit", name: "Orbit", kind: "p5"},
 	{id: "camera", name: "Camera", kind: "camera"},
 	{id: "_spike", name: "Spike (dev)", kind: "p5"},
+	{id: "flux", name: "Flux", kind: "glsl"},
 ];
 
 export default SCENES;

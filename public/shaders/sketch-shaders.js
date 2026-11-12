@@ -404,6 +404,21 @@ class ShaderEffects {
 					uMix: "mix",
 				},
 			},
+			colorTint: {
+				enabled: false,
+				hue: 0.0, // hue rotation, degrees 0–360
+				saturation: 1.0, // 0 = gray, 1 = unchanged, 2 = boosted
+				tintColor: [1.0, 0.5, 0.2], // filter color RGB 0–1
+				tintAmount: 0.0, // 0 = no filter, 1 = full multiply
+				mix: 1.0, // 0 = original, 1 = full effect
+				uniforms: {
+					uHue: "hue",
+					uSaturation: "saturation",
+					uTintColor: "tintColor",
+					uTintAmount: "tintAmount",
+					uMix: "mix",
+				},
+			},
 			dither: {
 				enabled: false,
 				ditherMode: 0.0, // 0=bayer4, 1=bayer8, 2=hash, 3=line, 4=clustered
@@ -608,6 +623,7 @@ class ShaderEffects {
 			["crtWarp", "crt-warp/fragment.frag", "crt-warp/vertex.vert"],
 			["wave", "wave/fragment.frag", "wave/vertex.frag"],
 			["colorQuantize", "color-quantize/fragment.frag", "color-quantize/vertex.vert"],
+			["colorTint", "color-tint/fragment.frag", "color-tint/vertex.vert"],
 			["dither", "dither/fragment.frag", "dither/vertex.vert"],
 		];
 	}
