@@ -159,12 +159,76 @@ class ScenePanel {
 				<span class="shader-effects-panel__title" data-ref="title">Scene</span>
 				<span class="shader-effects-panel__hint">V · digits switch</span>
 			</div>
+			<div class="scene-panel__error" data-ref="error" hidden></div>
+			<div class="shader-effects-panel__output-row scene-panel__toolbar">
+				<select class="shader-effects-panel__preset scene-panel__presets" data-ref="presets" title="Presets for this scene"></select>
+				<button type="button" class="shader-effects-panel__apply scene-panel__btn" data-act="save" title="Save the current values as a preset">save</button>
+				<button type="button" class="shader-effects-panel__apply scene-panel__btn" data-act="delete" title="Delete the selected preset">del</button>
+				<button type="button" class="shader-effects-panel__apply scene-panel__btn" data-act="reset" title="Reset every param to its default">reset</button>
+				<button type="button" class="shader-effects-panel__apply scene-panel__btn" data-act="copy" title="Copy current values as JSON (paste into meta.params)">copy</button>
+			</div>
 			<div class="shader-effects-panel__list" data-ref="list"></div>
 		`;
 		document.body.appendChild(panel);
 		this.el = panel;
 		this.titleEl = panel.querySelector('[data-ref="title"]');
 		this.listEl = panel.querySelector('[data-ref="list"]');
+		this.errorEl = panel.querySelector('[data-ref="error"]');
+		this.presetsEl = panel.querySelector('[data-ref="presets"]');
+
+		this.presetsEl.addEventListener("change", () => {
+			const name = this.presetsEl.value;
+			if (name) window.sceneParams?.loadPreset(name);
+		});
+		this.presetsEl.addEventListener("keydown", (e) => e.stopPropagation());
+		panel.querySelector('[data-act="save"]').addEventListener("click", () => {
+			const name = window.prompt("Preset name", this.presetsEl.value || "");
+			if (!name) return;
+			window.sceneParams?.savePreset(name.trim());
+			this._refreshPresets(name.trim());
+		});
+		panel.querySelector('[data-act="delete"]').addEventListener("click", () => {
+			const name = this.presetsEl.value;
+			if (!name || !window.confirm(`Delete preset "${name}"?`)) return;
+			window.sceneParams?.deletePreset(name);
+			this._refreshPresets();
+		});
+		panel.querySelector('[data-act="reset"]').addEventListener("click", () => window.sceneParams?.resetAll());
+		panel.querySelector('[data-act="copy"]').addEventListener("click", async (e) => {
+			const json = JSON.stringify(window.sceneParams?.snapshot() || {}, null, "\t");
+			try {
+				await navigator.clipboard.writeText(json);
+				e.target.textContent = "ok";
+			} catch (_) {
+				console.log("[scenePanel] values:\n" + json);
+				e.target.textContent = "log";
+			}
+			setTimeout(() => (e.target.textContent = "copy"), 900);
+		});
+	}
+
+	_refreshPresets(selected = "") {
+		if (!this.presetsEl) return;
+		const names = Object.keys(window.sceneParams?.presets() || {}).sort();
+		this.presetsEl.innerHTML = "";
+		const none = document.createElement("option");
+		none.value = "";
+		none.textContent = names.length ? "preset…" : "no presets";
+		this.presetsEl.appendChild(none);
+		for (const n of names) {
+			const opt = document.createElement("option");
+			opt.value = n;
+			opt.textContent = n;
+			if (n === selected) opt.selected = true;
+			this.presetsEl.appendChild(opt);
+		}
+	}
+
+	_refreshError() {
+		if (!this.errorEl) return;
+		const err = window.sceneHost?.lastError;
+		this.errorEl.hidden = !err;
+		this.errorEl.textContent = err ? `${err.id}: ${err.message}` : "";
 	}
 
 	/** Rebuild the param rows for whichever scene is now active. */
@@ -176,6 +240,8 @@ class ScenePanel {
 		const host = window.sceneHost;
 		const cur = host?.current;
 		this.titleEl.textContent = cur ? `Scene · ${cur.def.name || cur.def.id}` : "Scene";
+		this._refreshError();
+		this._refreshPresets();
 		if (!cur) return;
 
 		const kind = cur.def.kind || cur.def.meta?.kind;
@@ -286,6 +352,10 @@ class ScenePanel {
 				number.value = formatValue(clamped);
 			};
 
+			slider.addEventListener("dblclick", () => {
+				window.sceneParams?.reset(def.name);
+				this._editing = false;
+			});
 			slider.addEventListener("pointerdown", () => (this._editing = true));
 			slider.addEventListener("pointerup", () => (this._editing = false));
 			slider.addEventListener("input", () => commit(slider.value));

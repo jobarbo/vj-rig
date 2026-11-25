@@ -107,7 +107,7 @@ function serveStatic(req, res, urlPath) {
 				? html
 				: html.replace(
 						/<\/body>/i,
-						`<script>(function(){const es=new EventSource("${LR_PATH}");es.onmessage=()=>location.reload();})();</script></body>`,
+						`<script>(function(){const es=new EventSource("${LR_PATH}");es.onmessage=(e)=>{let files=[];try{files=JSON.parse(e.data).files||[];}catch(_){}if(!(files.length&&window.sceneHost?.hotReload?.(files)))location.reload();};})();</script></body>`,
 					);
 			send(res, 200, injected, {"Content-Type": contentType(filePath), "Cache-Control": "no-store"});
 		});
@@ -175,10 +175,15 @@ function handleLivereload(req, res) {
 	req.on("close", () => lrClients.delete(res));
 }
 
+// The client hot-swaps the active scene when every changed file belongs to it
+// (sceneHost.hotReload); anything else falls back to a full location.reload().
+const pendingFiles = new Set();
 function broadcastReload() {
+	const payload = JSON.stringify({files: [...pendingFiles]});
+	pendingFiles.clear();
 	for (const client of lrClients) {
 		try {
-			client.write("data: reload\n\n");
+			client.write(`data: ${payload}\n\n`);
 		} catch (_) {
 			lrClients.delete(client);
 		}
@@ -196,6 +201,7 @@ function watchPublic() {
 		fs.watch(ROOT, {recursive: true}, (_event, filename) => {
 			if (!filename || filename.startsWith(".")) return;
 			if (WATCH_IGNORE.test(filename)) return;
+			pendingFiles.add(filename.split(path.sep).join("/"));
 			clearTimeout(reloadTimer);
 			reloadTimer = setTimeout(broadcastReload, 120);
 		});

@@ -27,6 +27,7 @@ it resolves to scene 12, not scene 1 followed by scene 2.
 | `1` | Scene 1 |
 | `1` `2` (within 500ms) | Scene 12 |
 | `V` | Toggle the scene param panel |
+| `P` | Toggle the S-1 keys/knobs panel for the active scene |
 
 Taken elsewhere and unavailable: `D` `E` `L` `M` `G` `C`, plus `g` and `Cmd+S`
 which are bound at document level inside the library submodule.
@@ -83,9 +84,15 @@ in `setup` is fine.
 | `frame` | frames since **this scene** started (not the rig's `frameCount`) |
 | `time`, `dt` | seconds since this scene started / since last frame (`dt` clamped to 0.1) |
 | `params` | your declared params, live values |
-| `audio` | `bass mid treble energy volume subBass lowMid highMid presence beat beatPulse` |
+| `audio` | `bass mid treble energy volume subBass lowMid highMid presence beat beatPulse spectrum` |
 | `host` | `{width, height}` of `mainCanvas` — may differ from your surface |
 | `id`, `base`, `asset(name)` | your scene id, folder URL, and an asset path helper |
+
+`audio.spectrum` is a `Float32Array(120)` of log-spaced bands (30 Hz → 16 kHz,
+bass first), normalised 0–1 with the same AGC as `bass`/`mid`/`treble`. One
+band per LED column of half the 240-wide ceiling. It's the same array every
+frame — copy it if you need history. [`spectre/`](spectre/) shows how to
+smooth it and upload it to a GLSL scene as a texture.
 
 Load assets with `ctx.asset()` so the scene folder stays relocatable:
 
@@ -215,6 +222,44 @@ it stays live across a scene switch and simply does nothing if the new scene
 has no param by that name. Shader params in panel **E** use the same Learn
 button (keyed as `effect.param`).
 
+### Persistence and presets
+
+Every param write is saved per scene in `localStorage` (`vjSceneParams.<id>`)
+and restored the next time the scene loads, so the look survives a page
+reload. The toolbar at the top of panel V:
+
+| | |
+| --- | --- |
+| preset menu | load a named preset for this scene (`vjScenePresets.<id>`) |
+| `save` | save the current values as a preset (prompts for a name) |
+| `del` | delete the selected preset |
+| `reset` | every param back to its `meta.params` default |
+| `copy` | copy the current values as JSON — paste them into `meta.params` once you've found a look |
+
+Double-click a slider to reset just that param.
+
+### Keys and knobs per scene (panel `P`)
+
+Panel P binds the next S-1 **key** (velocity → value, key-up restores the
+previous value) or **knob** to a param of the active scene. Unlike the CC
+learn in V, these bindings are per scene (`<sceneId>.<param>`, stored in
+`vjSceneNoteMidi`) and only fire while that scene is on screen.
+
+---
+
+## Hot reload
+
+With `npm start`, saving a file of the **active** scene — its `index.js` entry,
+or any `.frag`/`.vert`/`.glsl` — swaps the scene in place **without reloading
+the page**: param values, `ctx.time` and every panel stay as they were.
+
+If the new code fails (GLSL compile error, exception in `setup`), the previous
+version stays on screen and the error is shown in red at the top of panel V.
+Fix and save again.
+
+Anything else (a sibling `.js` module, an asset, the engine, CSS, HTML) still
+triggers a full page reload: sibling modules can't be cache-busted.
+
 ---
 
 ## Media scenes: image, video, camera
@@ -253,11 +298,20 @@ You cannot get these wrong; the loader handles them:
   failures. It can never freeze the rig.
 - Disposal — `p.remove()` on switch, so WebGL contexts don't leak.
 
+## LED ceiling (240×20, strips in pairs)
+
+[`spectre/`](spectre/) renders at the ceiling's native `size: [240, 20]` with
+`fit: "stretch"` and `smooth: false`, and quantises to 240×10 logical cells
+(`ledColumns`/`ledRows`) because the strips are wired in pairs. To preview it
+undistorted, set `CANVAS_CONFIG.ARTWORK_RATIO = 12` (240 / 20) in
+[`sketch.js`](../sketch.js). [`flux/`](flux/) has the same `pixelate` toggle.
+
 ## Gotchas
 
 - **Media files** belong in `public/scenes/media/`, which is gitignored.
-- **`import()` caches by URL** for the page lifetime. Live reload does a full
-  `location.reload()`, so this only matters if you hot-swap by hand.
+- **`import()` caches by URL** for the page lifetime. Hot reload busts the
+  scene's entry module only — which is why a change to a sibling `.js` falls
+  back to a full reload.
 - **Use `.js`**, never `.mjs` — `.mjs` is missing from the dev server MIME map.
 - **Camera permission is per-scene-load**: switching to a camera scene twice
   prompts (or reuses a grant) each time; there's no persistent "keep this

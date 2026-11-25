@@ -111,7 +111,37 @@ canvas.p5Canvas.is-smooth {
 	right: auto;
 }
 
-.plasma-midi-panel {
+.scene-panel__toolbar {
+	margin-bottom: 6px;
+}
+
+.scene-panel .scene-panel__presets {
+	flex: 1;
+	min-width: 0;
+	max-width: none;
+}
+
+/* Doubled class: .shader-effects-panel__apply is declared later in this file. */
+.scene-panel .scene-panel__btn {
+	width: auto;
+	padding: 0 5px;
+	font-size: 9px;
+}
+
+.scene-panel__error {
+	margin: 0 0 6px;
+	padding: 4px 6px;
+	border-radius: 3px;
+	background: rgba(255, 70, 70, 0.2);
+	color: #ffb4b4;
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 8em;
+	overflow: auto;
+	text-transform: none;
+}
+
+.scene-note-midi-panel {
 	top: auto;
 	bottom: 12px;
 	left: 12px;
@@ -119,13 +149,13 @@ canvas.p5Canvas.is-smooth {
 	z-index: 9994;
 }
 
-.plasma-midi-panel__hint {
+.scene-note-midi-panel__hint {
 	margin: 0 0 8px;
 	color: rgba(255, 255, 255, 0.55);
 }
 
-.plasma-midi-panel__value,
-.plasma-midi-panel__bind {
+.scene-note-midi-panel__value,
+.scene-note-midi-panel__bind {
 	margin-left: 8px;
 	color: rgba(255, 255, 255, 0.7);
 }

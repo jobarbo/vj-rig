@@ -1,58 +1,72 @@
-// plasmaMidi.js — S-1 keys and knobs → plasma shader uniforms.
+// sceneNoteMidi.js — S-1 keys and knobs → the active scene's params (panel P).
 //
-// Distinct from the shader MIDI panel (M) and the scene param panel (V).
-// A key's velocity, or a knob's CC, maps across that uniform's min/max.
-// Key-up restores the value from before the key went down.
-// Writes only while the plasma scene is active.
+// Distinct from the shader MIDI panel (M) and the CC learn in the scene panel (V):
+// this one also learns KEYS. A key's velocity, or a knob's CC, maps across the
+// param's min/max; key-up restores the value from before the key went down.
+//
+// Bindings are per scene, keyed "<sceneId>.<param>", and only write while that
+// scene is active. Started life as sceneNoteMidi.js; its saved bindings
+// (vjPlasmaMidi) are migrated to "plasma.<param>" on first load.
 
-import {meta as plasmaMeta} from "../scenes/plasma/index.js";
-
-const STORAGE_KEY = "vjPlasmaMidi";
+const STORAGE_KEY = "vjSceneNoteMidi";
+const LEGACY_PLASMA_KEY = "vjPlasmaMidi";
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-/** @type {Map<string, {param:string, source:"note"|"cc", note?:number, cc?:number, channel:number}>} */
+/** @type {Map<string, {scene:string, param:string, source:"note"|"cc", note?:number, cc?:number, channel:number}>} */
 const bindings = new Map();
-/** @type {Map<number, {param:string, prev:number}>} */
+/** @type {Map<number, {scene:string, param:string, prev:number|boolean}[]>} */
 const heldNotes = new Map();
+
+const keyOf = (scene, param) => `${scene}.${param}`;
 
 function noteLabel(note) {
 	const n = Math.min(127, Math.max(0, Number(note) || 0));
 	return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
 }
 
+function activeId() {
+	return window.sceneHost?.current?.def?.id || null;
+}
+
+/** Param defs of the active scene. */
 function params() {
-	return plasmaMeta.params || [];
+	return window.sceneParams?.defs() || [];
 }
 
 function defFor(name) {
 	return params().find((d) => d.name === name) || null;
 }
 
-function plasmaActive() {
-	return window.sceneHost?.currentId === "plasma" || window.sceneHost?.current?.def?.id === "plasma";
+function readList(key) {
+	try {
+		const raw = localStorage.getItem(key);
+		const list = raw ? JSON.parse(raw) : null;
+		return Array.isArray(list) ? list : null;
+	} catch (_) {
+		return null;
+	}
 }
 
 function load() {
-	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		if (!raw) return;
-		const list = JSON.parse(raw);
-		if (!Array.isArray(list)) return;
-		for (const b of list) {
-			if (!b || typeof b.param !== "string") continue;
-			if (b.source !== "note" && b.source !== "cc") continue;
-			bindings.set(b.param, b);
-		}
-	} catch (err) {
-		console.warn("[plasmaMidi] failed to load bindings:", err);
+	let list = readList(STORAGE_KEY);
+	if (!list) {
+		// One-time migration from the plasma-only panel.
+		list = (readList(LEGACY_PLASMA_KEY) || []).map((b) => ({...b, scene: "plasma"}));
+		if (list.length) console.log(`[sceneNoteMidi] migrated ${list.length} plasma binding(s)`);
 	}
+	for (const b of list) {
+		if (!b || typeof b.param !== "string" || typeof b.scene !== "string") continue;
+		if (b.source !== "note" && b.source !== "cc") continue;
+		bindings.set(keyOf(b.scene, b.param), b);
+	}
+	if (list.length) persist();
 }
 
 function persist() {
 	try {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify([...bindings.values()]));
 	} catch (err) {
-		console.warn("[plasmaMidi] failed to persist bindings:", err);
+		console.warn("[sceneNoteMidi] failed to persist bindings:", err);
 	}
 }
 
@@ -65,12 +79,19 @@ function map7(value7, def) {
 	return v;
 }
 
-function writeParam(name, value) {
-	if (!plasmaActive()) return;
+function writeParam(scene, name, value) {
+	if (activeId() !== scene) return;
 	window.sceneParams?.set(name, value);
 }
 
-export const plasmaMidi = {
+/** Bindings of the active scene. */
+function* activeBindings() {
+	const id = activeId();
+	if (!id) return;
+	for (const b of bindings.values()) if (b.scene === id) yield b;
+}
+
+export const sceneNoteMidi = {
 	/** @type {null | string} param waiting for the next key or knob */
 	learning: null,
 
@@ -78,7 +99,7 @@ export const plasmaMidi = {
 	bindings,
 
 	bindingLabel(param) {
-		const b = bindings.get(param);
+		const b = bindings.get(keyOf(activeId(), param));
 		if (!b) return "—";
 		if (b.source === "note") return `key ${noteLabel(b.note)}`;
 		return `CC ${b.cc}`;
@@ -93,14 +114,12 @@ export const plasmaMidi = {
 	},
 
 	clear(param) {
-		bindings.delete(param);
+		bindings.delete(keyOf(activeId(), param));
 		persist();
 	},
 
 	reset(param) {
-		const def = defFor(param);
-		if (!def || !plasmaActive()) return;
-		window.sceneParams?.set(param, def.value ?? def.min ?? 0);
+		window.sceneParams?.reset(param);
 	},
 
 	async init() {
@@ -111,8 +130,8 @@ export const plasmaMidi = {
 		try {
 			const access = await navigator.requestMIDIAccess();
 			const bind = (input) => {
-				if (!input || input._plasmaMidiBound) return;
-				input._plasmaMidiBound = true;
+				if (!input || input._sceneNoteMidiBound) return;
+				input._sceneNoteMidiBound = true;
 				input.addEventListener("midimessage", (e) => this._onMessage(e));
 			};
 			for (const input of access.inputs.values()) bind(input);
@@ -120,16 +139,19 @@ export const plasmaMidi = {
 				if (e.port.type === "input" && e.port.state === "connected") bind(e.port);
 			};
 		} catch (err) {
-			console.warn("[plasmaMidi] requestMIDIAccess failed:", err);
+			console.warn("[sceneNoteMidi] requestMIDIAccess failed:", err);
 		}
 		return this;
 	},
 
 	_bind(entry) {
-		bindings.set(entry.param, entry);
-		persist();
+		const scene = activeId();
 		this.learning = null;
-		console.log(`[plasmaMidi] ${entry.param} ← ${entry.source === "note" ? noteLabel(entry.note) : "CC " + entry.cc}`);
+		if (!scene) return;
+		const full = {...entry, scene};
+		bindings.set(keyOf(scene, entry.param), full);
+		persist();
+		console.log(`[sceneNoteMidi] ${scene}.${entry.param} ← ${entry.source === "note" ? noteLabel(entry.note) : "CC " + entry.cc}`);
 	},
 
 	_onMessage(e) {
@@ -148,22 +170,24 @@ export const plasmaMidi = {
 			}
 
 			if (isOn) {
-				for (const b of bindings.values()) {
+				const held = heldNotes.get(note) || [];
+				for (const b of activeBindings()) {
 					if (b.source !== "note" || b.note !== note || b.channel !== channel) continue;
 					const def = defFor(b.param);
 					if (!def) continue;
-					if (!heldNotes.has(note)) {
-						heldNotes.set(note, {param: b.param, prev: window.sceneParams?.get(b.param) ?? def.value ?? def.min ?? 0});
+					if (!held.some((h) => h.param === b.param)) {
+						held.push({scene: b.scene, param: b.param, prev: window.sceneParams?.get(b.param) ?? def.value ?? def.min ?? 0});
 					}
-					writeParam(b.param, map7(velocity, def));
+					writeParam(b.scene, b.param, def.type === "bool" ? velocity > 0 : map7(velocity, def));
 				}
+				if (held.length) heldNotes.set(note, held);
 				return;
 			}
 
 			const held = heldNotes.get(note);
 			if (held) {
 				heldNotes.delete(note);
-				writeParam(held.param, held.prev);
+				for (const h of held) writeParam(h.scene, h.param, h.prev);
 			}
 			return;
 		}
@@ -179,16 +203,16 @@ export const plasmaMidi = {
 			this._bind({param: this.learning, source: "cc", cc, channel});
 		}
 
-		for (const b of bindings.values()) {
+		for (const b of activeBindings()) {
 			if (b.source !== "cc" || b.cc !== cc || b.channel !== channel) continue;
 			const def = defFor(b.param);
 			if (!def) continue;
-			writeParam(b.param, map7(value7, def));
+			writeParam(b.scene, b.param, map7(value7, def));
 		}
 	},
 };
 
-class PlasmaMidiPanel {
+class SceneNoteMidiPanel {
 	constructor() {
 		this.el = null;
 		this.visible = false;
@@ -198,6 +222,10 @@ class PlasmaMidiPanel {
 	init() {
 		this._ensureDom();
 		this.rebuild();
+		window.sceneHost?.onChange(() => {
+			sceneNoteMidi.cancelLearn();
+			this.rebuild();
+		});
 		return this;
 	}
 
@@ -208,15 +236,15 @@ class PlasmaMidiPanel {
 	}
 
 	update() {
-		if (!this.visible || !plasmaActive()) return;
+		if (!this.visible || !activeId()) return;
 		for (const [name, row] of this.rows) {
 			const v = window.sceneParams?.get(name);
 			if (row.valueEl && v != null && document.activeElement !== row.valueEl) {
-				row.valueEl.textContent = Number.isInteger(v) ? String(v) : Number(v).toFixed(2);
+				row.valueEl.textContent = typeof v === "boolean" ? (v ? "on" : "off") : Number.isInteger(v) ? String(v) : Number(v).toFixed(2);
 			}
-			row.learnBtn?.classList.toggle("is-armed", plasmaMidi.learning === name);
-			if (row.learnBtn) row.learnBtn.textContent = plasmaMidi.learning === name ? "…" : "learn";
-			if (row.bindEl) row.bindEl.textContent = plasmaMidi.bindingLabel(name);
+			row.learnBtn?.classList.toggle("is-armed", sceneNoteMidi.learning === name);
+			if (row.learnBtn) row.learnBtn.textContent = sceneNoteMidi.learning === name ? "…" : "learn";
+			if (row.bindEl) row.bindEl.textContent = sceneNoteMidi.bindingLabel(name);
 		}
 	}
 
@@ -229,27 +257,30 @@ class PlasmaMidiPanel {
 	_ensureDom() {
 		if (this.el) return;
 		const panel = document.createElement("div");
-		panel.id = "plasma-midi-panel";
-		panel.className = "shader-effects-panel plasma-midi-panel is-hidden";
+		panel.id = "scene-note-midi-panel";
+		panel.className = "shader-effects-panel scene-note-midi-panel is-hidden";
 		panel.setAttribute("aria-hidden", "true");
 		panel.innerHTML = `
 			<div class="shader-effects-panel__header">
-				<span class="shader-effects-panel__title">S-1 → Plasma</span>
+				<span class="shader-effects-panel__title" data-ref="title">S-1 → Scene</span>
 				<span class="shader-effects-panel__hint">P</span>
 			</div>
-			<p class="plasma-midi-panel__hint">Learn: next S-1 key (velocity) or knob. Key-up restores the previous value.</p>
+			<p class="scene-note-midi-panel__hint">Learn: next S-1 key (velocity) or knob. Key-up restores the previous value.</p>
 			<div class="shader-effects-panel__list" data-ref="list"></div>
 		`;
 		document.body.appendChild(panel);
 		this.el = panel;
 		this.listEl = panel.querySelector('[data-ref="list"]');
+		this.titleEl = panel.querySelector('[data-ref="title"]');
 	}
 
 	rebuild() {
 		if (!this.listEl) return;
 		this.rows.clear();
 		this.listEl.innerHTML = "";
-		for (const def of plasmaMidi.params()) {
+		const cur = window.sceneHost?.current;
+		this.titleEl.textContent = `S-1 → ${cur ? cur.def.name || cur.def.id : "Scene"}`;
+		for (const def of sceneNoteMidi.params()) {
 			const root = document.createElement("div");
 			root.className = "shader-effects-panel__control";
 
@@ -260,11 +291,11 @@ class PlasmaMidiPanel {
 			nameEl.textContent = def.label || def.name;
 
 			const valueEl = document.createElement("span");
-			valueEl.className = "plasma-midi-panel__value";
+			valueEl.className = "scene-note-midi-panel__value";
 
 			const bindEl = document.createElement("span");
-			bindEl.className = "plasma-midi-panel__bind";
-			bindEl.textContent = plasmaMidi.bindingLabel(def.name);
+			bindEl.className = "scene-note-midi-panel__bind";
+			bindEl.textContent = sceneNoteMidi.bindingLabel(def.name);
 
 			const learnBtn = document.createElement("button");
 			learnBtn.type = "button";
@@ -273,8 +304,8 @@ class PlasmaMidiPanel {
 			learnBtn.title = "Next S-1 key or knob drives this uniform";
 			learnBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
-				if (plasmaMidi.learning === def.name) plasmaMidi.cancelLearn();
-				else plasmaMidi.startLearn(def.name);
+				if (sceneNoteMidi.learning === def.name) sceneNoteMidi.cancelLearn();
+				else sceneNoteMidi.startLearn(def.name);
 				this.update();
 			});
 
@@ -284,7 +315,7 @@ class PlasmaMidiPanel {
 			clearBtn.textContent = "clear";
 			clearBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
-				plasmaMidi.clear(def.name);
+				sceneNoteMidi.clear(def.name);
 				this.update();
 			});
 
@@ -295,7 +326,7 @@ class PlasmaMidiPanel {
 			resetBtn.title = "Restore this uniform to its original value";
 			resetBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
-				plasmaMidi.reset(def.name);
+				sceneNoteMidi.reset(def.name);
 				this.update();
 			});
 
@@ -308,5 +339,5 @@ class PlasmaMidiPanel {
 	}
 }
 
-export const plasmaMidiPanel = new PlasmaMidiPanel();
-window.plasmaMidiPanel = plasmaMidiPanel;
+export const sceneNoteMidiPanel = new SceneNoteMidiPanel();
+window.sceneNoteMidiPanel = sceneNoteMidiPanel;

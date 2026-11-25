@@ -37,13 +37,14 @@ function uniformName(param) {
 	return "u" + param.charAt(0).toUpperCase() + param.slice(1);
 }
 
-export async function createGlslScene(mod, {node, width, height, ctx, pixelDensity = 1}) {
+export async function createGlslScene(mod, {node, width, height, ctx, pixelDensity = 1, version}) {
 	const meta = mod.meta || {};
 	const P5 = window.p5;
 	if (typeof P5 !== "function") throw new Error("[glslScene] p5 global not found");
 	if (!meta.frag) throw new Error(`[glslScene] scene "${ctx.id}" has no meta.frag`);
 
-	const [vertSrc, fragSrc] = await Promise.all([loadText(meta.vert ? ctx.asset(meta.vert) : DEFAULT_VERT), loadText(ctx.asset(meta.frag))]);
+	const bust = (url) => (version ? `${url}?v=${version}` : url);
+	const [vertSrc, fragSrc] = await Promise.all([loadText(bust(meta.vert ? ctx.asset(meta.vert) : DEFAULT_VERT)), loadText(bust(ctx.asset(meta.frag)))]);
 
 	let p = null;
 	let shader = null;
@@ -65,6 +66,10 @@ export async function createGlslScene(mod, {node, width, height, ctx, pixelDensi
 
 				// Own instance => own GL context => own shader. Never reuse shaderManager's.
 				shader = inst.createShader(vertSrc, fragSrc);
+				// p5 compiles lazily on first bind. Bind now so a GLSL error rejects
+				// the load (hot reload keeps the previous version on screen) instead
+				// of throwing every frame until the scene is quarantined.
+				inst.shader(shader);
 
 				ctx.p = inst;
 				ctx.width = inst.width;
@@ -80,8 +85,19 @@ export async function createGlslScene(mod, {node, width, height, ctx, pixelDensi
 		inst.draw = () => {};
 	}, node);
 
-	await authorReady;
-	await waitFor(() => p._setupDone === true, READY_TIMEOUT_MS, "_setupDone");
+	try {
+		await authorReady;
+		await waitFor(() => p._setupDone === true, READY_TIMEOUT_MS, "_setupDone");
+	} catch (err) {
+		// A failed compile/setup must not leak its WebGL context (browsers cap
+		// at ~16) — hot reload hits this path on every GLSL typo.
+		try {
+			p?.remove();
+		} catch (_) {
+			/* already gone */
+		}
+		throw err;
+	}
 
 	p.draw = () => {
 		p.clear();
