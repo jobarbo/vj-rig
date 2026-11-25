@@ -27,7 +27,6 @@ it resolves to scene 12, not scene 1 followed by scene 2.
 | `1` | Scene 1 |
 | `1` `2` (within 500ms) | Scene 12 |
 | `V` | Toggle the scene param panel |
-| `P` | Toggle the S-1 keys/knobs panel for the active scene |
 
 Taken elsewhere and unavailable: `D` `E` `L` `M` `G` `C`, plus `g` and `Cmd+S`
 which are bound at document level inside the library submodule.
@@ -184,8 +183,10 @@ Press `V` to open the scene panel — a slider per declared param, positioned on
 the opposite side of the screen from the shader panel (`E`). It shows and
 drives whatever scene is currently active; switching scenes rebuilds it.
 
-Every write — dragging a slider, an audio mapping, a MIDI binding — goes
-through one path: `shaderEffects.updateEffectParam("scene", paramName, value)`.
+Every write ends in `window.sceneParams.set()`, which clamps and persists.
+Sliders and audio mappings get there through
+`shaderEffects.updateEffectParam("scene", paramName, value)`; MIDI bindings
+(see below) call `sceneParams.set()` directly.
 `"scene"` is a reserved pseudo-effect name; the guard for it lives at the top
 of `updateEffectParam` in [`sketch-shaders.js`](../shaders/sketch-shaders.js)
 and routes to `window.sceneParams`, clamping to the param's declared
@@ -213,14 +214,35 @@ if you click it to take manual control back.
 
 ### MIDI
 
-Click **learn** next to a param, then turn a hardware knob — the next CC
-binds to it and is saved in `localStorage`. Learned bindings override the
-Roland S-1 presets in `public/midi/s1Midi.js` for the same `(cc, channel)`.
+Each param in panel V has a **MIDI chip** on the right:
 
-A binding is keyed by param name only, not by scene — like an audio mapping,
-it stays live across a scene switch and simply does nothing if the new scene
-has no param by that name. Shader params in panel **E** use the same Learn
-button (keyed as `effect.param`).
+| Chip | Meaning | Click |
+| --- | --- | --- |
+| `MIDI` (grey) | not bound | start learning |
+| `TURN…` (orange, pulsing) | listening | cancel (or `Esc`) |
+| `CC74` / `C4` (blue) | bound to a knob / an S-1 key | re-learn — `×` unbinds |
+
+While listening, the **first** MIDI message decides the kind of binding:
+
+- **knob (CC)** — 0–127 maps across the param's `min`/`max`.
+- **S-1 key** — velocity maps across `min`/`max`; releasing the key restores
+  the value from before it went down (a `bool` param is on while held).
+
+Bindings are **per scene** (`<sceneId>.<param>`, stored in `vjSceneNoteMidi`)
+and only fire while that scene is on screen — binding `speed` in Plasma does
+not drive `speed` in another scene. A knob bound to a scene param wins over
+its Roland S-1 preset in `public/midi/s1Midi.js`.
+
+Only one learn is armed at a time, across panel V and the shader panel E.
+Shader params in panel E keep their own CC learn (`midiLearn`, keyed
+`effect.param`, in `vjMidiLearns`).
+
+Implementation: [`scene/sceneParamMidi.js`](../scene/sceneParamMidi.js) (engine)
+and [`scene/midiChip.js`](../scene/midiChip.js) (the chip).
+
+> Migration: panel P (S-1 keys → scene params) was merged into V, and its
+> bindings carried over. Old CC learns from V were global by param name; each
+> is adopted by a scene the first time a scene declaring that param is shown.
 
 ### Persistence and presets
 
@@ -237,13 +259,6 @@ reload. The toolbar at the top of panel V:
 | `copy` | copy the current values as JSON — paste them into `meta.params` once you've found a look |
 
 Double-click a slider to reset just that param.
-
-### Keys and knobs per scene (panel `P`)
-
-Panel P binds the next S-1 **key** (velocity → value, key-up restores the
-previous value) or **knob** to a param of the active scene. Unlike the CC
-learn in V, these bindings are per scene (`<sceneId>.<param>`, stored in
-`vjSceneNoteMidi`) and only fire while that scene is on screen.
 
 ---
 

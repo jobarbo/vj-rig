@@ -500,7 +500,7 @@
 		lastAt = performance.now();
 		notify();
 
-		if (window.midiLearn?.learning) return;
+		if (window.midiLearn?.learning || window.sceneParamMidi?.learning) return;
 		if (window.midiLearn?.isCcBound?.(cc, channel)) return;
 		if (channel !== S1_MIDI_CHANNEL) return;
 

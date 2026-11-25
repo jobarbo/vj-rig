@@ -11,7 +11,7 @@ import {createMediaScene} from "./runtime/mediaScene.js";
 import "./sceneParams.js"; // side effect: window.sceneParams
 import {scenePanel} from "./scenePanel.js";
 import {sceneMidi} from "./sceneMidi.js";
-import {sceneNoteMidi, sceneNoteMidiPanel} from "./sceneNoteMidi.js";
+import {sceneParamMidi} from "./sceneParamMidi.js";
 
 registerRuntime("glsl", createGlslScene);
 registerRuntime("image", createMediaScene);
@@ -42,8 +42,9 @@ export async function bootScenes({width, height, pixelDensity = 1, initial} = {}
 
 	scenePanel.init();
 	sceneMidi.init(); // async; scene switching/params work before it resolves
-	sceneNoteMidiPanel.init();
-	sceneNoteMidi.init();
+	// After sceneMidi.init(): its loadPersisted() hands old "scene.*" learns over
+	// synchronously, before sceneParamMidi adopts them.
+	sceneParamMidi.init();
 
 	console.log(`[boot] scene system ready — ${SCENES.length} scene(s), active: ${host.currentId}`);
 	return host;

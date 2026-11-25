@@ -141,23 +141,144 @@ canvas.p5Canvas.is-smooth {
 	text-transform: none;
 }
 
-.scene-note-midi-panel {
-	top: auto;
-	bottom: 12px;
-	left: 12px;
-	right: auto;
-	z-index: 9994;
+/* ── Param rows in panel V ───────────────────────────────────────────────
+   [live dot] [name …………] [value / checkbox] [MIDI chip] [×]
+   The name takes the slack and ellipsises; everything right of it has a fixed
+   width so the chips line up in a column. */
+.scene-panel .shader-effects-panel__control-meta {
+	justify-content: flex-start;
+	gap: 6px;
 }
 
-.scene-note-midi-panel__hint {
-	margin: 0 0 8px;
-	color: rgba(255, 255, 255, 0.55);
+.scene-panel__name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
-.scene-note-midi-panel__value,
-.scene-note-midi-panel__bind {
-	margin-left: 8px;
-	color: rgba(255, 255, 255, 0.7);
+.scene-panel .shader-effects-panel__number {
+	width: 64px;
+	flex-shrink: 0;
+}
+
+/* ── MIDI learn chip (scene/midiChip.js) ── */
+.midi-chip-wrap {
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.midi-chip {
+	box-sizing: border-box;
+	/* Fixed width: "MIDI" → "TURN…" → "CC127" must not shift the row. */
+	width: 50px;
+	height: 18px;
+	padding: 0 3px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	border-radius: 9px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.4);
+	font:
+		9px/1 "Courier New",
+		ui-monospace,
+		monospace;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	cursor: pointer;
+	transition:
+		color 0.12s,
+		border-color 0.12s,
+		background 0.12s;
+}
+
+.midi-chip:hover {
+	color: #fff;
+	border-color: rgba(110, 200, 255, 0.6);
+}
+
+.midi-chip.is-bound {
+	border-color: rgba(110, 200, 255, 0.5);
+	background: rgba(110, 200, 255, 0.16);
+	color: #cfefff;
+}
+
+.midi-chip.is-learning {
+	border-color: #ffb43c;
+	background: rgba(255, 180, 60, 0.22);
+	color: #ffd89a;
+	animation: midi-chip-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes midi-chip-pulse {
+	50% {
+		background: rgba(255, 180, 60, 0.05);
+	}
+}
+
+/* Space is always reserved so binding/unbinding never shifts the row. */
+.midi-chip__clear,
+.midi-chip__icon {
+	width: 16px;
+	height: 18px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: rgba(255, 255, 255, 0.35);
+	font: 12px/1 ui-monospace, monospace;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.midi-chip__clear {
+	visibility: hidden;
+}
+
+.midi-chip-wrap.is-bound .midi-chip__clear {
+	visibility: visible;
+}
+
+.midi-chip__clear:hover {
+	color: #ff8a8a;
+}
+
+.midi-chip__icon:hover {
+	color: #fff;
+}
+
+/* Panel E's "learn" (CC → param) and "key" (S-1 key → effect) buttons live in
+   the library submodule at a fixed 22–26px, so their labels overflow. Matched
+   by title since they have no class of their own; styled like .midi-chip.
+   Inline padding/font-size from the submodule need !important to override. */
+.shader-effects-panel__apply[title^="Bind the next MIDI CC"],
+.shader-effects-panel__clone[title^="Next S-1 key"] {
+	box-sizing: border-box;
+	width: 50px;
+	height: 18px;
+	padding: 0 3px !important;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	border-radius: 9px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.45);
+	font:
+		9px/1 "Courier New",
+		ui-monospace,
+		monospace !important;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.shader-effects-panel__apply[title^="Bind the next MIDI CC"]:hover,
+.shader-effects-panel__clone[title^="Next S-1 key"]:hover {
+	color: #fff;
+	border-color: rgba(110, 200, 255, 0.6);
+	background: transparent;
 }
 
 /* S-1 MIDI map panel */

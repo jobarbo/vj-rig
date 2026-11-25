@@ -7,6 +7,9 @@
 // Persisted in localStorage under vjMidiLearns.
 
 const STORAGE_KEY = "vjMidiLearns";
+// Scene params moved to scene/sceneParamMidi.js (per scene, keys + knobs). Old
+// "scene.*" learns are handed over under this key and adopted per scene there.
+const LEGACY_SCENE_CC_KEY = "vjSceneCcLegacy";
 
 /** @type {Map<string, {cc:number, channel:number, effect:string, param:string, outMin?:number, outMax?:number, integer?:boolean, type?:string}>} */
 const bindings = new Map();
@@ -30,13 +33,24 @@ function loadPersisted() {
 		if (!raw) return;
 		const list = JSON.parse(raw);
 		if (!Array.isArray(list)) return;
+		const handover = [];
 		for (const b of list) {
 			if (!b || typeof b.effect !== "string" || typeof b.param !== "string") continue;
 			if (!Number.isFinite(b.cc) || !Number.isFinite(b.channel)) continue;
+			if (b.effect === "scene") {
+				handover.push({param: b.param, cc: b.cc, channel: b.channel});
+				continue;
+			}
 			bindings.set(bindingKey(b.effect, b.param, b.index), b);
 			if (typeof midiLiveControl !== "undefined") {
 				midiLiveControl.register(b.effect, b.param, `MIDI CC${b.cc}`);
 			}
+		}
+		if (handover.length) {
+			const prev = JSON.parse(localStorage.getItem(LEGACY_SCENE_CC_KEY) || "[]");
+			localStorage.setItem(LEGACY_SCENE_CC_KEY, JSON.stringify([...(Array.isArray(prev) ? prev : []), ...handover]));
+			persist(); // drop them from vjMidiLearns
+			console.log(`[midiLearn] handed ${handover.length} scene learn(s) over to sceneParamMidi`);
 		}
 	} catch (err) {
 		console.warn("[midiLearn] failed to load persisted learns:", err);
@@ -177,7 +191,8 @@ export const midiLearn = {
 		for (const b of bindings.values()) {
 			if (b.cc === cc && b.channel === channel) return true;
 		}
-		return false;
+		// Knobs learned on a scene param (panel V) also win over S-1 presets.
+		return !!window.sceneParamMidi?.isCcBound(cc, channel);
 	},
 
 	/**

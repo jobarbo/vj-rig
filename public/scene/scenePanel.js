@@ -14,6 +14,17 @@
 // calling an existing method, not editing one. A local fallback covers the
 // case where shaderEffectsPanel hasn't loaded.
 
+import {createMidiChip} from "./midiChip.js";
+
+// Scene param bindings (S-1 key or knob, per scene) — see sceneParamMidi.js.
+function paramMidi() {
+	return window.sceneParamMidi || null;
+}
+
+function chipState(paramName) {
+	return paramMidi()?.chipState(paramName) || {learning: false, label: null};
+}
+
 function liveSource(paramName) {
 	const sp = typeof shaderEffectsPanel !== "undefined" ? shaderEffectsPanel : null;
 	if (sp && typeof sp._getLiveSource === "function") {
@@ -116,7 +127,7 @@ class ScenePanel {
 	constructor() {
 		this.el = null;
 		this.visible = false;
-		this.controls = new Map(); // paramName -> {root, slider, number, liveDot, learnBtn}
+		this.controls = new Map(); // paramName -> {root, slider, number, liveDot, chip}
 		this._editing = false;
 	}
 
@@ -285,29 +296,16 @@ class ScenePanel {
 		});
 
 		const nameEl = document.createElement("span");
+		nameEl.className = "scene-panel__name";
 		nameEl.textContent = def.label || def.name;
+		nameEl.title = def.label ? `${def.label} (${def.name})` : def.name;
 
-		const learnBtn = document.createElement("button");
-		learnBtn.type = "button";
-		learnBtn.className = "shader-effects-panel__apply";
-		learnBtn.style.cssText = "margin-left:4px;padding:0 6px;font-size:9px;";
-		learnBtn.title = "Bind the next MIDI CC turned to this param";
-		learnBtn.textContent = "learn";
-		learnBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			const midi = window.midiLearn || window.sceneMidi;
-			if (!midi) return;
-			const learningThis = midi.learning?.effect === "scene" && midi.learning?.param === def.name;
-			if (learningThis) {
-				midi.cancelLearn();
-				learnBtn.textContent = "learn";
-			} else {
-				midi.startLearn("scene", def.name, () => {
-					learnBtn.textContent = "learn";
-				});
-				learnBtn.textContent = "…";
-			}
+		const chip = createMidiChip({
+			onLearn: () => paramMidi()?.startLearn(def.name),
+			onCancel: () => paramMidi()?.cancelLearn(),
+			onClear: () => paramMidi()?.clear(def.name),
 		});
+		chip.render(chipState(def.name));
 
 		let slider;
 		let number;
@@ -320,12 +318,10 @@ class ScenePanel {
 			slider.addEventListener("change", () => {
 				shaderEffects?.updateEffectParam("scene", def.name, slider.checked);
 			});
-			meta.appendChild(liveDot);
-			meta.appendChild(nameEl);
-			meta.appendChild(learnBtn);
-			root.classList.add("shader-effects-panel__control--bool");
+			// Checkbox sits where the number field is on numeric rows, so the
+			// MIDI chips line up down the whole panel.
+			meta.append(liveDot, nameEl, slider, chip.root);
 			root.appendChild(meta);
-			root.appendChild(slider);
 		} else {
 			number = document.createElement("input");
 			number.type = "number";
@@ -384,12 +380,12 @@ class ScenePanel {
 			meta.appendChild(liveDot);
 			meta.appendChild(nameEl);
 			meta.appendChild(number);
-			meta.appendChild(learnBtn);
+			meta.appendChild(chip.root);
 			root.appendChild(meta);
 			root.appendChild(slider);
 		}
 
-		const control = {root, slider, number, liveDot, learnBtn};
+		const control = {root, slider, number, liveDot, chip};
 		this.controls.set(def.name, control);
 		this._refreshLive(def.name, control);
 		return root;
@@ -415,7 +411,9 @@ class ScenePanel {
 
 	/** Called every frame from draw(). Cheap: only syncs views, no rebuilding. */
 	update() {
-		if (!this.visible || this._editing) return;
+		if (!this.visible) return;
+		for (const [name, control] of this.controls) control.chip.render(chipState(name));
+		if (this._editing) return;
 		const cur = window.sceneHost?.current;
 		if (!cur) return;
 
