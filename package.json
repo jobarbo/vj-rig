@@ -6,7 +6,8 @@
 	"scripts": {
 		"start": "node ./scripts/dev-server.js",
 		"osc:bridge": "node ./scripts/osc-bridge.js",
-		"osc:test": "node ./scripts/osc-test.js"
+		"osc:test": "node ./scripts/osc-test.js",
+		"td:export": "node ./touchdesigner/export.mjs"
 	},
 	"dependencies": {
 		"dotenv": "^16.0.3",

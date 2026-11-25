@@ -6,3 +6,5 @@ node_modules/
 # Scene media assets: videos/images live here but stay out of git.
 public/scenes/media/*
 !public/scenes/media/.gitkeep
+
+touchdesigner/*

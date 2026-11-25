@@ -294,8 +294,10 @@ function setupMidiKnobs() {
 	if (typeof shaderEffects === "undefined") return;
 
 	// S-1 CC13 (LFO Pitch) → rotation angle, smoothed (see public/midi/s1Midi.js presets)
-	const initAngle = shaderEffects.effectsConfig.symmetry.rotationStartingAngle;
-	addKnobSmooth(13, "symmetry", "rotationStartingAngle", initAngle, 0.08);
+	// The restored panel stack may not contain symmetry (effects can be removed).
+	const symmetry = shaderEffects.effectsConfig.symmetry;
+	if (!symmetry) return;
+	addKnobSmooth(13, "symmetry", "rotationStartingAngle", symmetry.rotationStartingAngle, 0.08);
 }
 
 function setupMidiClockOsc() {
@@ -462,7 +464,7 @@ function keyPressed() {
 	}
 
 	if (key === "G" || key === "g") {
-		if (typeof shaderEffects !== "undefined") {
+		if (typeof shaderEffects !== "undefined" && shaderEffects.effectsConfig.symmetry) {
 			const currentDebug = shaderEffects.effectsConfig.symmetry.debug;
 			const newDebug = currentDebug > 0.5 ? 0.0 : 1.0;
 			shaderEffects.updateEffectParam("symmetry", "debug", newDebug);
